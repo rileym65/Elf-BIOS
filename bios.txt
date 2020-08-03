@@ -1,25 +1,113 @@
-Bios entry point FF01h
+call:       0ffe0h
+  Standard Call
 
-Function in D
+ret:        0fff1h
+  Standard Return
 
-function    01  - Type character in RF.0
-function    02  - Read character into D
-function    03  - Type message pointed to by R[X], 0 terminated
-function    04  - Type character from M(R[X]), increment R[X].
-function    05  - Input, buffer pointed to by R[X]
-function    06  - Compare strings pointed to bye R[6] and R[X].
-function    07  - Left trim string pointed to by R[X]
-function    08  - string copy R[X] to R[6], terminates on 0
-function    09  - Memory copy R[X] to R[6], R[F] holds count
-function    10  - Write disk sector
-function    11  - Read disk sector
-function    12  - Seek to track 0
-function    13  - Seek to track
-function    14  - Select Drive
-function    15  - Determine terminal baud rate
-function    16  - 8-bit by 8-bit multiply
-function    17  - 16-bit by 16-bit divide
-function    18  - perform ide reset
-function    19  - write ide sector
-function    20  - read ide sector
+
+f_boot:     0ff00h
+  Boot system from floppy drive.
+  Args:    None
+  Returns: None
+
+
+f_type:     0ff03h
+  Type character to console
+  Args:       D - Character to type
+           RE.1 - Baud constant
+  Returns: None
+
+
+f_read:     0ff06h
+  Read character from console
+  Args:    RE.1 - Baud Constant
+  Returns:    D - Read Character
+
+
+f_msg:      0ff09h
+  Type 0 terminated message to console
+  Args:      RF - Pointer to message
+           RE.1 - Baud Constant
+  Returns: None
+
+f_input:    0ff0fh
+  Read input line from console
+  Args:      RF - Pointer to input buffer
+           RE.1 - Baud Constant
+  Returns: None
+
+f_strcmp:   0ff12h
+  Compare 2 strings
+  Args:      RF - String 1
+             RD - String 2
+  Returns:    D = 0 when RF = RD
+              D = -1 when RF < RD
+              D = 1 when RF > RD
+
+f_ltrim:    0ff15h
+  Move pointer to first non-whitespace
+  Args:      RF - pointer to string
+  Returns:   RF - pointer to first non-whitespace
+
+f_strcpy:   0ff18h
+  Copy zero terminated string R[F] to R[D]
+  Args:  R[F] - Source String
+         R[D] - Destination String
+  Returns: None
+
+f_memcpy:   0ff1bh
+  Copy R[C] bytes of memory from R[F] to R[D]
+  Args: R[C] - count
+        R[F] - Source
+        R[D] - Destination
+
+f_wrtsec:   equ  0ff1eh
+f_rdsec:    equ  0ff21h
+f_seek0:    equ  0ff24h
+f_seek:     equ  0ff27h
+f_drive:    equ  0ff2ah
+
+f_setbd:    0ff2dh
+  Determine terminal characteristics
+  Args: None (requires input of <CR> or <LF> from console)
+  Returns: RE.1 = Baud Constant
+
+f_mul16:     equ  0ff30h
+  Multiply 16-bit by 16-bit Number
+  Args: RF - First Number
+        RD - Second Number
+  Returns: RB - Low word of answer
+           RC - High word of answer
+
+f_div16:    equ  0ff33h
+  Divide 16-bit by 16-bit number
+  Args - RF  - First number
+         RD  - Second number
+  Returns: RB - Answer
+           RF - Remainder
+
+f_idereset: 0ff36h
+  Reset IDE subsystem
+  Args: None
+  Returns: None
+
+f_idewrite: 0ff39h
+  Write to IDE drive
+  Args: R7.0 - Value for Sector Start Register
+        R7.1 - Value for Cylinder Lo Register
+        R8.0 - Value for Cylinder Hi Register
+        R8.1 - Value for Head/Device Register
+          RF - Pointer to disk transfer buffer
+          R2 - Stack
+  Returns: D - Controller Status Register
+
+f_ideread:  0ff3ch
+  Read from IDE drive
+  Args: R7.0 - Value for Sector Start Register
+        R7.1 - Value for Cylinder Lo Register
+        R8.0 - Value for Cylinder Hi Register
+        R8.1 - Value for Head/Device Register
+          R2 - Stack
+          RF - Pointer to disk transfer buffer
+  Returns: D - Controller Status Register
 

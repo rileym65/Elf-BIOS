@@ -1,160 +1,113 @@
 data:   equ     0
+scall:  equ     r4
+sret:   equ     r5
 
-        org     0ff00h
-return: sep     r3
-bios:   lbz     boot         ; jump if cold boot (00)
-        smi     01h          ; check for type  (01)
-        lbz     type         ; jump to type6 routine
-        smi     01h          ; check for get char (02)
-        lbz     read
-        smi     01h          ; check for type message (03)
-        lbz     typemsg
-        smi     01h          ; check for typex (04)
-        lbz     typex        ; jump to typex routine
-        smi     01h          ; check for input (05)
-        lbz     input        ; jump to input routine
-        smi     01h          ; check for string compare (06)
-        lbz     strcmp       ; jump to string compare routine
-        smi     01h          ; check for ltrim function (07)
-        lbz     ltrim        ; jump if found
-        smi     01h          ; check for strcpy function (08)
-        lbz     strcpy       ; jump if found
-        smi     01h          ; check for memcpy function (09)
-        lbz     memcpy       ; jump if found
-        smi     01h          ; check for write sector function (10)
-        lbz     wrtsec       ; jump if found
-        smi     01h          ; check for read sector function (11)
-        lbz     rdsec        ; jump if found
-        smi     01h          ; check for track 0 function  (12)
-        lbz     trk0         ; jump if found
-        smi     01h          ; check for track seek function  (13)
-        lbz     seek         ; jump if found
-        smi     01h          ; check for select drive function  (14)
-        lbz     drvsel       ; jump if found
-        smi     01h          ; check for get terminal setting (15)
-        lbz     timalc       ; jump if found
-        smi     01h          ; check for get mul 8 (16)
-        lbz     mul8         ; jump if found
-        smi     01h          ; check for get dev 16 (17)
-        lbz     div16        ; jump if found
-        smi     01h          ; check for ide reset (18)
-        lbz     resetide     ; jump if found
-        smi     01h          ; check for ide write (19)
-        lbz     wrtide       ; jump if found
-        smi     01h          ; check for ide read (20)
-        lbz     rdide        ; jump if found
+           org     0ff00h
+f_boot:    lbr     boot
+f_type:    lbr     type
+f_read:    lbr     read
+f_msg:     lbr     typemsg
+f_typex:   lbr     return
+f_input:   lbr     input
+f_strcmp:  lbr     strcmp
+f_ltrim:   lbr     ltrim
+f_strcpy:  lbr     strcpy
+f_memcpy:  lbr     memcpy
+f_wrtsec:  lbr     wrtsec
+f_rdsec:   lbr     rdsec
+f_seek0:   lbr     trk0
+f_seek:    lbr     seek
+f_drive:   lbr     drvsel
+f_setbd:   lbr     timalc
+f_mul16:   lbr     mul16
+f_div16:   lbr     div16
+f_iderst:  lbr     resetide
+f_idewrt:  lbr     wrtide
+f_ideread: lbr     rdide
+f_initcall: lbr    initcall
+f_ideboot: lbr     bootide
 
-        br     return        ; return to caller
+return:    sep     sret                ; return to caller
 
-returna: ldi   high ret4
-         phi   rb
-         ldi   low ret4
-         plo   rb
-         sep   rb
-ret4:    glo   ra
-         plo   r3
-         ghi   ra
-         phi   r3
-         br   return
+; ***************************************
+; *** Type message pointed to by R[F] ***
+; ***************************************
+typemsg:   lda     rf                  ; load byte from message
+           lbz     return              ; return if last byte
+           sep     scall               ; call type routine
+           dw      f_type
+           br      typemsg             ; loop until a zero found
 
-typemsg: glo   r3            ; get callers address
-         plo   ra            ; save for later
-         ghi   r3            ; high part
-         phi   ra
-         ldi   low typelp    ; get type loop address
-         plo   r3            ; and place into r5
-         ldi   high typelp
-         phi   r3
-         sep   r3
-typelp:  ldx                 ; load byte from message
-         lbz   returna       ; return if last byte
-         ldi   high bios     ; get address of call routine
-         phi   rb            ; place into register 3
-         ldi   low  bios     ; get low portion of address
-         plo   rb
-         ldi   4             ; function to use type4
-         sep   rb            ; perform the function
-         br    typelp        ; loop until a zero found
-
-input:   glo   r3            ; get callers address
-         plo   ra            ; save for later
-         ghi   r3            ; high part
-         phi   ra
-         ldi   low inplp     ; get type loop address
-         plo   r3            ; and place into r5
-         ldi   high inplp
-         phi   r3
-         ldi   0             ; byte count
-         plo   rc            ; store into counter
-         sep   r3
-inplp:   ldi   high bios     ; get address of call routine
-         phi   rb            ; place into register 3
-         ldi   low  bios     ; get low portion of address
-         plo   rb
-         ldi   2             ; function to read key
-         mark                ; save x
-         sep   rb            ; perform the function
-         sex   r2            ; point x at stack
-         irx                 ; point to old x
-         ret                 ; recover x
-         dec   r2            ; restore stack pointer
-         stxd                ; store byte
-         irx                 ; point to next position
-         irx                 ; point to next position
-         smi   08            ; look for backspace
-         bnz   nobs          ; jump if not a backspace
-         glo   rc            ; get input count
-         bz    inplp         ; disregard if string is empty
-         dec   rc            ; decrement the count
-         stxd                ; decrement buffer position
-         stxd    
-         br    inplp         ; and loop back for more
-nobs:    smi   05            ; check for CR
-         bz    inpdone       ; loop back if not
-         inc   rc            ; increment input count
-         br    inplp         ; and then loop back
-inpdone: ldi   0             ; need a zero terminator
-         stxd                ; store into buffer
-         lbr   returna       ; return to caller
+input:     glo     ra                  ; save RA
+           stxd
+           ghi     ra
+           stxd
+           ldi     0                   ; byte count
+           plo     ra                  ; store into counter
+inplp:     sep     scall               ; call input function
+           dw      f_read
+           str     rf                  ; store into output
+           inc     rf                  ; point to next position
+           smi     08                  ; look for backspace
+           bnz     nobs                ; jump if not a backspace
+           glo     ra                  ; get input count
+           bz      inplp               ; disregard if string is empty
+           dec     ra                  ; decrement the count
+           dec     rf                  ; decrement buffer position
+           dec     rf
+           br      inplp               ; and loop back for more
+nobs:      smi     05                  ; check for CR
+           bz      inpdone             ; loop back if not
+           inc     ra                  ; increment input count
+           br      inplp               ; and then loop back
+inpdone:   ldi     0                   ; need a zero terminator
+           str     rf                  ; store into buffer
+           irx                         ; recover RA
+           ldxa
+           phi     ra
+           ldx
+           plo     ra
+           sep     sret                ; return to caller
 
 
 ; *****************************************************
 ; *** Function to implement a stack based call      ***
-; ***    R2 is assumed to be the stack pointer      ***
+; ***    RX is assumed to be the stack pointer      ***
 ; ***    R3 is assumed to be the main PC            ***
-; ***    RF is consumed                             ***
+; ***    R6 will hold return address                ***
 ; ***    usage is:    sep R4                        ***
 ; ***                 dw  call_addr                 ***
-; *** Routine saves R3 values onto the stack        ***
-; *** and and sets it to the call address           ***
 ; *****************************************************
          org     0ffdfh
          sep     r3                    ; jump to called routine
-call:    phi     rf                    ; save D
-         sex     r2                    ; set x to stack segment
-         lda     r3                    ; get high byte and advance to low
-         plo     rf                    ; save it
-         inc     r3                    ; move past low address
-         glo     r3                    ; get low value of return address
-         stxd                          ; store onto stack
-         ghi     r3                    ; get high value of return address
-         stxd                          ; and place onto stack
-         dec     r3                    ; point to low byte
-         ldn     r3                    ; get low byte
-         plo     r3                    ; and place into low byte of PC
-         glo     rf                    ; recover high byte
-         phi     r3                    ; put into high of PC
-         ghi     rf                    ; recover D
+call:    plo     re                    ; Save D
+         ghi     r6                    ; save last R[6] to stack
+         stxd
+         glo     r6
+         stxd
+         ghi     r3                    ; copy R[3] to R[6]
+         phi     r6
+         glo     r3
+         plo     r6
+         lda     r6                    ; get subroutine address
+         phi     r3                    ; and put into r3
+         lda     r6
+         plo     r3
+         glo     re                    ; recover D
          br      call-1                ; transfer control to subroutine
 
          sep     r3                    ; transfer control back to coller
-ret:     phi     rf                    ; save return value
-         inc     r2                    ; point to high byte of return address
-         lda     r2                    ; get high byte
-         phi     r3                    ; put into register 5
-         ldn     r2                    ; get low byte
-         plo     r3                    ; put into low
-         ghi     rf                    ; recall return value
+ret:     plo     re                    ; Save D
+         ghi     r6                    ; copy R[6] to R[3]
+         phi     r3
+         glo     r6
+         plo     r3
+         irx                           ; point to old R[6]
+         ldxa
+         plo     r6
+         ldx
+         phi     r6
+         glo     re
          br      ret-1                 ; and perform return to caller
 
          org     0fe00h
@@ -207,7 +160,7 @@ statlp:  inp     3           ; read status
          shr                 ; shift busy bit into DF
          bdf     statlp      ; loop until no longer busy
          shl                 ; shift back into position
-         lbr     return      ; return status code
+         sep     sret        ; return status code
 
 ; **** Read sector from disk, R(6) points to buffer
 ; ****    R(6) must point to an even 256 byte boundary
@@ -265,7 +218,7 @@ drvsel:  ldi     low data    ; get address of scratchpad
          str     rf          ; store into command buffer
          out     2           ; write drive select to selector
          out     3           ; write drive select register
-         lbr     return      ; return to caller
+         sep     sret        ; return to caller
 
 ; **** Restore to track 0
 trk0:    ldi     low data    ; get address of scratchpad
@@ -329,121 +282,129 @@ boot1:   ldi     low call    ; get address of bios table
          sep     r0          ; transfer control to read sector
 
          org     0fd00h
-; **** Strcmp compares the strings pointing to by R(6) and R(X)
+; **** Strcmp compares the strings pointing to by R(D) and R(F)
 ; **** Returns:
-; ****    R(6) = R(X)     0
-; ****    R(6) < R(X)     -1 (255)
-; ****    R(6) > R(X)     1
-strcmp:  lda     r6          ; get next byte in string
+; ****    R(F) = R(D)     0
+; ****    R(F) < R(D)     -1 (255)
+; ****    R(F) > R(D)     1
+strcmp:  lda     rd          ; get next byte in string
          ani     0ffh        ; check for zero
          bz      strcmpe     ; found end of first string
+         stxd                ; store into memory
+         irx
+         lda     rf          ; get byte from first string
          sm                  ; subtract 2nd byte from it
-         irx                 ; point to next character
          bz      strcmp      ; so far a match, keep looking
          bnf     strcmp1     ; jump if first string is smaller
          ldi     1           ; indicate first string is larger
          lskp                ; and return to caller
 strcmp1: ldi     255         ; return -1, first string is smaller
-         lbr     return      ; return to calelr
-strcmpe: ldx                 ; get byte from second string
+         sep     sret        ; return to calelr
+strcmpe: lda     rf          ; get byte from second string
          bz      strcmpm     ; jump if also zero
-         ldi     255         ; first string is smaller (returns -1)
-         lbr     return      ; return to caller
+         ldi     1           ; first string is smaller (returns -1)
+         sep     sret        ; return to caller
 strcmpm: ldi     0           ; strings are a match
-         lbr     return      ; return to caller
+         sep     sret        ; return to caller
 
-; **** ltrim trims leading white space from string pointed to by R[X]
+; **** ltrim trims leading white space from string pointed to by R[F]
 ; **** Returns:
-; ****    R(X) pointing to non-whitespace portion of string
-ltrim:   ldx                 ; get next byte from string
+; ****    R(F) pointing to non-whitespace portion of string
+ltrim:   ldn     rf          ; get next byte from string
          lbz     return      ; return if at end of string
          smi     ' '+1       ; looking for anthing <= space
          lbdf    return      ; found first non white-space
-         irx                 ; point to next character
+         inc     rf          ; point to next character
          br      ltrim       ; keep looking
 
-; **** strcpy copies string pointed to by R[X] to R[6]
-strcpy:  ldxa                ; get byte from source string
-         str    r6           ; store into destination
+; **** strcpy copies string pointed to by R[F] to R[D]
+strcpy:  lda    rf           ; get byte from source string
+         str    rd           ; store into destination
          lbz    return       ; return if copied terminator
-         inc    r6           ; increment destination pointer
+         inc    rd           ; increment destination pointer
          br     strcpy       ; continue looping
 
-; **** memcpy copies R[F] bytes from R[X] to R[6]
-memcpy:  glo    rf           ; get low count byte
+; **** memcpy copies R[C] bytes from R[F] to R[D]
+memcpy:  glo    rc           ; get low count byte
          bnz    memcpy1      ; jump if not zero
-         ghi    rf           ; get high count byte
+         ghi    rc           ; get high count byte
          lbz    return       ; return if zero
-memcpy1: ldxa                ; get byte from source
-         str    r6           ; store into destination
-         inc    r6           ; point to next destination position
-         dec    rf           ; decrement count
+memcpy1: lda    rf           ; get byte from source
+         str    rd           ; store into destination
+         inc    rd           ; point to next destination position
+         dec    rc           ; decrement count
          br     memcpy       ; and continue copy
 
-; *** RF = a x b   
-; *** R6.0 = a 
-; *** R6.1 = b
+; *** RC:RB = RF * RD (RB is low word)
 ; *** R(X) must point to suitable stack
-
-mul8:      ghi     r6                  ; get b
-           stxd                        ; store to stack
-           ldi     0                   ; zero out total
-           phi     rf
+mul16:     ldi     0                   ; zero out total
+           phi     rb
+           plo     rb
+           phi     rc
+           plo     rc
+           sex     r2                  ; make sure X points to stack
+mulloop:   glo     rd                  ; get low of multiplier
+           bnz     mulcont             ; continue multiplying if nonzero
+           ghi     rd                  ; check hi byte as well
+           bnz     mulcont
+           sep     sret                ; return to caller
+mulcont:   ghi     rd                  ; shift multiplier
+           shr     
+           phi     rd
+           glo     rd
+           shrc    
+           plo     rd
+           bnf     mulcont2            ; loop if no addition needed
+           glo     rf                  ; add F to C:B
+           str     r2
+           glo     rb
+           add     
+           plo     rb
+           ghi     rf
+           str     r2
+           ghi     rb
+           adc
+           phi     rb
+           glo     rc                  ; carry into high word
+           adci    0
+           plo     rc
+           ghi     rc
+           adci    0
+           phi     rc
+mulcont2:  glo     rf                  ; shift first number
+           shl
            plo     rf
-           phi     r6                  ; clear high byte of a
+           ghi     rf
+           shlc
+           phi     rf
+           br      mulloop             ; loop until done
 
-mul8lp:    irx                         ; point to b
-           ldx                         ; get b 
-           lbz     return              ; jump if rest of b is zero
-           shr                         ; shift lowest bit to DF
-           stxd                        ; and put back
-           bnf     noadd8              ; jump if bit was zero
-           glo     r6                  ; get lo byte of a
-           stxd                        ; place into memory
-           irx                         ; point to byte
-           glo     rf                  ; get lo byte of total
-           add                         ; add together
-           plo     rf                  ; put into lo byte of total
-           ghi     r6                  ; get high byte of a
-           stxd                        ; store into memory
-           irx                         ; point to byte
-           ghi     rf                  ; get high of total
-           adc                         ; add together
-           phi     rf                  ; put back into hi byte
-noadd8:    glo     r6                  ; get lo byte of a
-           shl                         ; multiply by 2
-           plo     r6                  ; put back
-           ghi     r6                  ; get high byte
-           shlc                        ; propagate multiply by 2
-           phi     r6                  ; put back
-           br      mul8lp              ; loop until b is zero
-
-; *** RF = R6/R7
-; *** R6 = remainder
+; *** RB = RF/RD
+; *** RF = Remainder
 ; *** uses R8 and R9
 div16:     ldi     0                   ; clear answer
-           phi     rf
-           plo     rf
+           phi     rb
+           plo     rb
            phi     r8                  ; set additive
            plo     r8
            inc     r8
-           glo     r7                  ; check for divide by 0
+           glo     rd                  ; check for divide by 0
            bnz     d16lp1
-           ghi     r7
+           ghi     rd
            bnz     d16lp1
            ldi     0ffh                ; return 0ffffh as div/0 error
-           phi     rf
-           plo     rf
-           lbr     return   
-d16lp1:    ghi     r7                  ; get high byte from r7
+           phi     rb
+           plo     rb
+           sep     sret     
+d16lp1:    ghi     rd                  ; get high byte from r7
            ani     128                 ; check high bit
            bnz     divst               ; jump if set
-           glo     r7                  ; lo byte of divisor
+           glo     rd                  ; lo byte of divisor
            shl                         ; multiply by 2
-           plo     r7                  ; and put back
-           ghi     r7                  ; get high byte of divisor
+           plo     rd                  ; and put back
+           ghi     rd                  ; get high byte of divisor
            shlc                        ; continue multiply by 2
-           phi     r7                  ; and put back
+           phi     rd                  ; and put back
            glo     r8                  ; multiply additive by 2
            shl
            plo     r8
@@ -451,50 +412,50 @@ d16lp1:    ghi     r7                  ; get high byte from r7
            shlc
            phi     r8
            br      d16lp1              ; loop until high bit set in divisor
-divst:     glo     r7                  ; get low of divisor
+divst:     glo     rd                  ; get low of divisor
            bnz     divgo               ; jump if still nonzero
-           ghi     r7                  ; check hi byte too
+           ghi     rd                  ; check hi byte too
            lbz     return              ; jump if done
-divgo:     ghi     r6                  ; copy dividend
+divgo:     ghi     rf                  ; copy dividend
            phi     r9
-           glo     r6
+           glo     rf
            plo     r9
-           glo     r7                  ; get lo of divisor
+           glo     rd                  ; get lo of divisor
            stxd                        ; place into memory
            irx                         ; point to memory
-           glo     r6                  ; get low byte of dividend
+           glo     rf                  ; get low byte of dividend
            sm                          ; subtract
-           plo     r6                  ; put back into r6
-           ghi     r7                  ; get hi of divisor
+           plo     rf                  ; put back into r6
+           ghi     rd                  ; get hi of divisor
            stxd                        ; place into memory
            irx                         ; point to byte
-           ghi     r6                  ; get hi of dividend
+           ghi     rf                  ; get hi of dividend
            smb                         ; subtract
-           phi     r6                  ; and put back
+           phi     rf                  ; and put back
            bdf     divyes              ; branch if no borrow happened
            ghi     r9                  ; recover copy
-           phi     r6                  ; put back into dividend
+           phi     rf                  ; put back into dividend
            glo     r9
-           plo     r6
+           plo     rf
            br      divno               ; jump to next iteration
 divyes:    glo     r8                  ; get lo of additive
            stxd                        ; place in memory
            irx                         ; point to byte
-           glo     rf                  ; get lo of answer
+           glo     rb                  ; get lo of answer
            add                         ; and add
-           plo     rf                  ; put back
+           plo     rb                  ; put back
            ghi     r8                  ; get hi of additive
            stxd                        ; place into memory
            irx                         ; point to byte
-           ghi     rf                  ; get hi byte of answer
+           ghi     rb                  ; get hi byte of answer
            adc                         ; and continue addition
-           phi     rf                  ; put back
-divno:     ghi     r7                  ; get hi of divisor
+           phi     rb                  ; put back
+divno:     ghi     rd                  ; get hi of divisor
            shr                         ; divide by 2
-           phi     r7                  ; put back
-           glo     r7                  ; get lo of divisor
+           phi     rd                  ; put back
+           glo     rd                  ; get lo of divisor
            shrc                        ; continue divide by 2
-           plo     r7
+           plo     rd
            ghi     r8                  ; get hi of divisor
            shr                         ; divide by 2
            phi     r8                  ; put back
@@ -517,19 +478,37 @@ divno:     ghi     r7                  ; get hi of divisor
 delay:  equ     rc           ; register holding address for delay routine
 char:   equ     rd
 baud:   equ     re           ; register holding baud information
-ascii:  equ     rf           ; register for ascii
-typexit: lbr     return       ; return to caller
-typex:  ldx                  ; get byte from m(x) and advance
-        irx
-        skp
-type:   glo     ascii        ; get low byte of ascii
-        plo     char         ; place byte into register D
+; **********************************
+; *** D = Character to output    ***
+; *** RE.1 = Baud constant       ***
+; **********************************
+termxit: irx
+        ldxa                 ; recover RD
+        phi     rd
+        ldxa
+        plo     rd
+        ldxa                 ; recover RC
+        phi     rc
+        ldx
+        plo     rc
+        sep     sret         ; return to caller
+type:   plo     re
+        glo     rc           ; save RC
+        stxd
+        ghi     rc
+        stxd
+        glo     rd           ; save RD
+        stxd
+        ghi     rd
+        stxd
+        glo     re           ; recover character
+        phi     char
         xri     0ah          ; check for linefeed
         bnz     ty2          ; jump if not
         ldi     5bh          ; more bits if need to wait
         lskp                 ; jump
 ty2:    ldi     0bh          ; 11 bits to write
-        plo     ascii
+        plo     char
         ldi     delay1.1
         phi     delay
         ldi     delay1.0
@@ -547,64 +526,87 @@ nxtbit: sep     delay        ; call delay routine
         nop                  ; wait
         nop                  ; wait
         nop                  ; wait
-        dec     ascii        ; decrement number of bits
+        dec     char         ; decrement number of bits
         sdi     0
-        glo     char         ; get next bit of character
+        ghi     char         ; get next bit of character
         shrc                 ; lease significant bit first
-        plo     char         ; put back
+        phi     char         ; put back
         lsdf                 ; long skip if bit =0
         seq                  ;   set q=1 - "space"
         lskp                 ; skip next 2 bytes
         req                  ; if bit = 1,
         nop                  ;    set q=0 = "mark"
-        glo     ascii        ; until #bits = 0
+        glo     char         ; until #bits = 0
         ani     0fh
         bnz     nxtbit       ; loop if more to go
-        glo     ascii        ; get code byte
+        glo     char         ; get code byte
         adi     0fbh         ; decrement code
-        plo     ascii        ; set #bits
-        bnf     typexit      ; jump if no more
+        plo     char         ; set #bits
+        bnf     termxit      ; jump if no more
         smi     01bh         ; if code = 1
-        bz      typexit      ; then was last null, exit
+        bz      termxit      ; then was last null, exit
 zer:    ldi     0            ; if code > 1
-        plo     char         ; load byte
+        phi     char         ; load byte
         br      begin        ; and type it
 
-delext: sep     rb           ; return from delay routine
+delext: sep     r3           ; return from delay routine
 delay1: ghi     baud         ; get baud constant
         shr                  ; remove echo flag
         plo     baud         ; repeat
 dellp2: dec     baud         ;   decrement baud
-        lda     rb           ;   get #bits
+        lda     r3           ;   get #bits
 dellp1: smi     1            ;   decrement until zero
         bnz     dellp1       ;
         glo     baud         ;   until baud = 0
         bz      delext       ; return if done
-        dec     rb
+        dec     r3
         br      dellp2
 
-rexit:  ghi     ascii        ; get character
-        lbr     return       ; return to caller
-read:  ldi     0            ; flag for terminal control
-        plo     ascii        ; save entry flag
+; **************************************
+; *** RE.1 = Baud constant           ***
+; *** Returns: RD.1 - read character ***
+; **************************************
+rexit:  ghi     rd           ; get character
+        plo     re           ; save through restore
+        irx
+        ldxa                 ; recover RD
+        phi     rd
+        ldxa
+        plo     rd
+        ldxa                 ; recover RC
+        phi     rc
+        ldx
+        plo     rc
+        glo     re           ; recover character
+        sep     sret         ; return to caller
+read:   glo     rc           ; save RC
+        stxd
+        ghi     rc
+        stxd
+        glo     rd           ; save RD
+        stxd
+        ghi     rd
+        stxd
+        ldi     0            ; flag for terminal control
+        plo     char         ; save entry flag
 read2:  ldi     80h          ; set #bits in character = 7
-        phi     ascii        ; (7 shift changes 80 into 01)
+        phi     char         ; (7 shift changes 80 into 01)
         ldi     delay1.1
         phi     delay
         ldi     delay1.0
         plo     delay
-        sex     rb
-        out     7            ; turn reader on
-        db      80h
+;        sex     rb
+;        out     7            ; turn reader on
+;        db      80h
         bn4     $            ; wait while stop bit
 tty1:   b4      $
         sep     delay        ; delay 1/2 bit time
         db      2
         b4      tty1
-        out     7
-        db      40h
-nobit:  sex     r2           ; equalize delays
-        sex     r2
+;        out     7
+;        db      40h
+nobit:  inc     r2           ; equalize delays
+        dec     r2
 bit:    ghi     baud
         shr
         bdf     noecho       ; check if need to echo
@@ -614,41 +616,46 @@ bit:    ghi     baud
 outbit: req
 noecho: nop                  ; equalize delays
         lsnf
-        sex    r2
-        sex    r2
-        sex    r2
+        nop 
+        nop
         nop
         nop
         sep    delay         ; wait 1 bit time
         db     7
         inc    baud          ; set delay flag = 1
-        ghi    ascii         ; shift by 1 bit
+        ghi    char          ; shift by 1 bit
         shr
-        phi    ascii
+        phi    char 
         bdf    stop
         ori    80h
         bn4    nobit
-        phi    ascii         ; continue loop
+        phi    char          ; continue loop
         br     bit
 stop:   req                  ; set stop bit
         bz     read2         ; repeat if 00=null
         br     rexit         ; done
+
+; ************************************
+; *** Determine terminal baud rate ***
+; *** Waits for CR or Lf           ***
+; *** Returns RE.1 - Baud constant ***
+; ************************************
 timalc:  ldi   high delay1
          phi   delay
          ldi   low delay1
          plo   delay
          ldi   0
          plo   baud
-         plo   ascii
+         plo   char 
          b4    $
          bn4   $
          ldi   3
 tc:      smi   1
          bnz   tc
-         glo   ascii
+         glo   char 
          bnz   zto1
          b4    incr
-         inc   ascii
+         inc   char 
 zto1:    b4    daux
 incr:    inc   baud
          ldi   7
@@ -666,7 +673,19 @@ daux:    dec   baud
          phi   baud
 wait:    sep   delay
          db    26h
-         lbr   return
+         sep     sret  
+
+initcall:  ldi     high ret
+           stxd
+           stxd
+           phi     r5
+           ldi     low ret
+           plo     r5
+           ldi     high call
+           phi     r4
+           ldi     low call
+           plo     r4
+           sep     r5
 
            org   0fb00h
 resetide:  ldi     high waitrdy        ; get address of subs
@@ -712,20 +731,20 @@ resetide:  ldi     high waitrdy        ; get address of subs
            plo     rf
            mark                        ; save current P and X
            sep     rf                  ; call wait for RDY routine
-           lbr     return              ; return to caller
+           sep     sret                ; return to caller
 
            
 wrtide:    ldi     high waitrdy        ; get address of subs
-           phi     rf                  ; place into rf
+           phi     rc                  ; place into rf
            ldi     low waitrdy
-           plo     rf
+           plo     rc
            sex     r2                  ; point x to stack
            mark                        ; save current P and X
-           sep     rf                  ; call wait for RDY routine
+           sep     rc                  ; call wait for RDY routine
            dec     r2                  ; compensate for RET increment
            ldi     030h                ; command for sector write
            mark                        ; save current P and X
-           sep     rf                  ; now call command sequence
+           sep     rc                  ; now call command sequence
            dec     r2                  ; compensate for RET increment
            ldi     2                   ; high byte of 512
            phi     r7                  ; place into count
@@ -735,29 +754,30 @@ wrtide:    ldi     high waitrdy        ; get address of subs
            str     r2                  ; place on stack
            out     2                   ; select data register
            dec     r2                  ; move pointer
-           sex     r6                  ; set data pointer
+           sex     rf                  ; set data pointer
 wrtloop:   out     3                   ; write to ide controller
            dec     r7                  ; decrement byte count
            glo     r7                  ; check for completion
            bnz     wrtloop             ; jump if not
            ghi     r7                  ; need to check high byte
            bnz     wrtloop             ; jump if more to go
-           mark                        ; save current P and X
-           sep     rf                  ; call waitrdy routine
-           dec     r2                  ; compensate for RET increment
-           lbr     return              ; and return to caller
-
-rdide:     ldi     high waitrdy        ; get address of subs
-           phi     rf                  ; place into rf
-           ldi     low waitrdy
-           plo     rf
            sex     r2                  ; point x to stack
            mark                        ; save current P and X
-           sep     rf                  ; call wait for RDY routine
+           sep     rc                  ; call waitrdy routine
+           dec     r2                  ; compensate for RET increment
+           sep     sret                ; and return to caller
+
+rdide:     ldi     high waitrdy        ; get address of subs
+           phi     rc                  ; place into rf
+           ldi     low waitrdy
+           plo     rc
+           sex     r2                  ; point x to stack
+           mark                        ; save current P and X
+           sep     rc                  ; call wait for RDY routine
            dec     r2                  ; compensate for RET increment
            ldi     020h                ; command for sector read
            mark                        ; save current P and X
-           sep     rf                  ; now call command sequence
+           sep     rc                  ; now call command sequence
            dec     r2                  ; compensate for RET increment
            ldi     2                   ; high byte of 512
            phi     r7                  ; place into count
@@ -766,16 +786,17 @@ rdide:     ldi     high waitrdy        ; get address of subs
            str     r2                  ; place on stack
            out     2                   ; select data register
            dec     r2                  ; move pointer
-           sex     r6                  ; set data pointer
+           sex     rf                  ; set data pointer
 rdloop:    inp     3                   ; read from ide controller
-           inc     r6                  ; point to next position
+           inc     rf                  ; point to next position
            dec     r7                  ; decrement byte count
            glo     r7                  ; check for completion
            bnz     rdloop              ; jump if not
            ghi     r7                  ; need to check high byte
            bnz     rdloop              ; jump if more to go
            ldi     0                   ; signify read complete
-           lbr     return              ; and return to caller
+           sex     r2
+           sep     sret                ; and return to caller
 
           
 beforerdy: irx                         ; move pointer to SAV location
@@ -793,7 +814,7 @@ rdyloop:   inp     3                   ; read status port
            irx                         ; move pointer to SAV location
            ret                         ; and return to caller
 ; RF will point to wrtcmd, which is next needed after first waitrdy
-wrtcmd:    sex     r2                  ; set x register
+wrtcmd:    sex     r2
            stxd                        ; write passed command to stack
            ldi     7                   ; command register
            stxd                        ; write to stack
@@ -835,4 +856,28 @@ drqloop:   inp     3                   ; read status register
            bz      drqloop             ; loop until found
            br      beforerdy           ; return, readying waitrdy again
 ; the branch to beforerdy, allows us to use waitrdy again
+
+bootide:   ldi     high bootret        ; prepare for seetin call
+           phi     r6
+           ldi     low bootret
+           plo     r6
+           lbr     f_initcall
+bootret:   sep     scall               ; reset ide drive
+           dw      f_iderst
+           ldi     0                   ; prepare to read sector 0
+           plo     r7
+           phi     r7
+           plo     r8
+           plo     rf
+           ldi     0e0h
+           phi     r8
+           ldi     1
+           phi     rf
+           sep     scall
+           dw      f_ideread
+           ldi     1
+           phi     r0
+           ldi     0
+           plo     r0
+           sep     r0
 
