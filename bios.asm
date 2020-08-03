@@ -305,9 +305,9 @@ boot:    ldi     low boot1   ; get address of boot routine
          ldi     high boot1  ; get high part
          phi     r5          ; and place into register
          sep     r5          ; transfer to new program counter
-boot1:   ldi     low call    ; get address of bios table
+boot1:   ldi     low bios    ; get address of bios table
          plo     r3          ; place into r3
-         ldi     high call   ; high portion
+         ldi     high bios   ; high portion
          phi     r3          ; place into register
          ldi     12          ; function to seek to track 0
          sep     r3          ; perform seek
