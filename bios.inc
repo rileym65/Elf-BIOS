@@ -32,10 +32,17 @@ f_tty:      equ  0ff4eh
 f_mover:    equ  0ff51h
 f_minimon:  equ  0ff54h
 f_freemem:  equ  0ff57h
-f_isnum:    equ  0ff5ah
+F_isnum:    equ  0ff5ah
 f_atoi:     equ  0ff5dh
 f_uintout:  equ  0ff60h
 f_intout:   equ  0ff63h
 f_inmsg:    equ  0ff66h
 f_inputl:   equ  0ff69h
 f_findtkn:  equ  0ff6fh
+f_isalpha:  equ  0ff72h
+f_ishex:    equ  0ff75h
+f_isalnum:  equ  0ff78h
+f_idnum:    equ  0ff7bh
+f_isterm:   equ  0ff7eh
+f_getdev:   equ  0ff81h
+
