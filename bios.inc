@@ -36,3 +36,5 @@ f_isnum:    equ  0ff5ah
 f_atoi:     equ  0ff5dh
 f_uintout:  equ  0ff60h
 f_intout:   equ  0ff63h
+f_inmsg:    equ  0ff66h
+f_inputl:   equ  0ff69h

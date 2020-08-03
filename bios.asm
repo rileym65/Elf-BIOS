@@ -6,6 +6,9 @@
 ; *** without express written permission from the author.         ***
 ; *******************************************************************
 
+#define SERP    b4
+#define SERN    bn4
+
 data:   equ     0
 scall:  equ     r4
 sret:   equ     r5
@@ -197,6 +200,11 @@ findnxt:   dec     r7                  ; subtract 1 for zero check
            phi     r7
            lda     r9
            plo     r7
+           smi     1                   ; see if at last number
+           bnz     nxtiter             ; jump if not 
+           irx                         ; set leading flag
+           ldi     1
+           stxd
            br      nxtiter
 intdone:   irx                         ; put x back where it belongs
            irx                         ; recover consumed registers
@@ -371,6 +379,15 @@ docrlf:    ldi     high crlf
 prompt:    db      '>',0
 crlf:      db      10,13,0
 
+; ***************************************
+; *** Type inline message             ***
+; ***************************************
+typeinmsg: lda     r6                  ; load byte from message
+           lbz     return              ; return if last byte
+           sep     scall               ; call type routine
+           dw      f_type
+           br      typeinmsg           ; loop until a zero found
+
 
            org   0fa00h
 ; ***************************************************************
@@ -470,6 +487,39 @@ hexoutal:  glo     re                  ; get value
            adi     55                  ; convert to ascii
            br      hexoutl3            ; and continue
 
+
+         sep     r3                    ; jump to called routine
+call:    plo     re                    ; Save D
+         ghi     r6                    ; save last R[6] to stack
+         sex     r2
+         stxd
+         glo     r6
+         stxd
+         ghi     r3                    ; copy R[3] to R[6]
+         phi     r6
+         glo     r3
+         plo     r6
+         lda     r6                    ; get subroutine address
+         phi     r3                    ; and put into r3
+         lda     r6
+         plo     r3
+         glo     re                    ; recover D
+         br      call-1                ; transfer control to subroutine
+
+         sep     r3                    ; transfer control back to coller
+ret:     plo     re                    ; Save D
+         ghi     r6                    ; copy R[6] to R[3]
+         phi     r3
+         glo     r6
+         plo     r3
+         sex     r2
+         irx                           ; point to old R[6]
+         ldxa
+         plo     r6
+         ldx
+         phi     r6
+         glo     re
+         br      ret-1                 ; and perform return to caller
 ;
 ; MOVER.ASM - Function Move Programs Into Low memory
 ; For Execution.
@@ -746,15 +796,15 @@ timalc:    glo     rb                  ; save consumed registesr
            plo     rc
            phi     rb                  ; and counter 2
            plo     rb
-           b4      $                   ; wait until start bit found
+           SERP    $                   ; wait until start bit found
 setbd1:    inc     rc
            sex     r2
            sex     r2
-           bn4     setbd1              ; wait until another high
+           SERN    setbd1              ; wait until another high
 setbd2:    inc     rb
            sex     r2
            sex     r2
-           b4      setbd2              ; wait til the next low
+           SERP    setbd2              ; wait til the next low
            glo     rb                  ; compare values
            shr                         ; quantize over small differences
            shr     
@@ -835,6 +885,7 @@ sendct:    sep     rd                  ; perform bit dela
            plo     rf
            sep     sret
 
+#ifdef ELF2K
 read:      glo     rf
            stxd
            ghi     rf
@@ -854,7 +905,71 @@ read:      glo     rf
            shr
            smi     01
            phi     re
-           b4      $                   ; wait for transmission
+           SERP    $                   ; wait for transmission
+           sep     rd                  ; wait half the pulse width
+           ghi     rf                  ; recover baud constant
+           phi     re
+recvlp:    ghi     rf
+           shr                         ; shift right
+           SERN    recvlp0             ; jump if zero bi
+           ori     128                 ; set bit
+recvlp1:   phi     rf
+           sep     rd                  ; perform bit delay
+           dec     rf                  ; decrement bit count
+           nop
+           nop
+           glo     rf                  ; check for zero
+           bnz     recvlp              ; loop if not
+recvdone:  req
+           sep     rd                  ; get past stop bit
+           sep     rd
+           ghi     rf                  ; get character
+           plo     re
+           irx
+           ldxa
+           phi     rd
+           ldxa
+           plo     rd
+           ldxa
+           phi     rf
+           ldx
+           plo     rf
+           glo     re
+           shr
+           plo     re                  ; save char
+           ghi     re                  ; get echo flag
+           shr                         ; see if need echo
+           glo     re                  ; get character
+           bnf     noecho              ; jump if no echo needed
+           stxd                        ; save on stack
+           sep     scall               ; type the character out
+           dw      f_type
+           irx                         ; recover character
+           ldx
+noecho:    sep     sret                ; and return to caller
+recvlp0:   br      recvlp1             ; equalize between 0 and 1
+
+#else
+read:      glo     rf
+           stxd
+           ghi     rf
+           stxd
+           glo     rd
+           stxd
+           ghi     rd
+           stxd
+           ldi     8                   ; 8 bits to receive
+           plo     rf
+           ldi     high delay
+           phi     rd
+           ldi     low delay
+           plo     rd
+           ghi     re                  ; first delay is half bit size
+           phi     rf
+           shr
+           smi     01
+           phi     re
+           SERP    $                   ; wait for transmission
            sep     rd                  ; wait half the pulse width
            ghi     rf                  ; recover baud constant
            phi     re
@@ -862,7 +977,7 @@ read:      glo     rf
            bdf     recvlpe
 recvlp:    ghi     rf
            shr                         ; shift right
-           bn4     recvlp0             ; jump if zero bi
+           SERN    recvlp0             ; jump if zero bi
            ori     128                 ; set bit
 recvlp1:   phi     rf
            sep     rd                  ; perform bit delay
@@ -892,7 +1007,7 @@ recvlp0:   br      recvlp1             ; equalize between 0 and 1
 
 recvlpe:   ghi     rf
            shr                         ; shift right
-           bn4     recvlpe0            ; jump if zero bi
+           SERN    recvlpe0            ; jump if zero bi
            ori     128                 ; set bit
            req
 recvlpe1:  phi     rf
@@ -905,11 +1020,12 @@ recvlpe1:  phi     rf
            br      recvdone
 recvlpe0:  seq
            br      recvlpe1
+#endif
 
 
 initcall:  ldi     high ret
-           stxd
-           stxd
+           dec     r2
+           dec     r2
            phi     r5
            ldi     low ret
            plo     r5
@@ -1050,9 +1166,9 @@ d16lp1:    ghi     rd                  ; get high byte from r7
            shlc
            phi     r8
            br      d16lp1              ; loop until high bit set in divisor
-divst:     glo     rd                  ; get low of divisor
+divst:     glo     r8                  ; get low of divisor
            bnz     divgo               ; jump if still nonzero
-           ghi     rd                  ; check hi byte too
+           ghi     r8                  ; check hi byte too
            lbz     return              ; jump if done
 divgo:     ghi     rf                  ; copy dividend
            phi     r9
@@ -1353,7 +1469,7 @@ f_type:    lbr     tty
 f_read:    lbr     read
 f_msg:     lbr     typemsg
 f_typex:   lbr     return
-f_input:   lbr     input
+f_input:   lbr     input256
 f_strcmp:  lbr     strcmp
 f_ltrim:   lbr     ltrim
 f_strcpy:  lbr     strcpy
@@ -1382,6 +1498,8 @@ f_isnum:   lbr     isnum
 f_atoi:    lbr     atoi
 f_uintout: lbr     uintout
 f_intout:  lbr     intout
+f_inmsg:   lbr     typeinmsg
+f_inputl:  lbr     input
 
 return:    sep     sret                ; return to caller
 
@@ -1394,6 +1512,10 @@ typemsg:   lda     rf                  ; load byte from message
            dw      f_type
            br      typemsg             ; loop until a zero found
 
+input256:  ldi     1                   ; allow 256 input bytes
+           phi     rc
+           ldi     0
+           plo     rc
 input:     glo     ra                  ; save RA
            stxd
            ghi     ra
@@ -1402,29 +1524,55 @@ input:     glo     ra                  ; save RA
            plo     ra                  ; store into counter
 inplp:     sep     scall               ; call input function
            dw      f_read
+           plo     re                  ; save char
+           smi     3                   ; check for <CTRL><C>
+           bz      inpterm             ; terminate input
+           smi     5                   ; check for <BS>
+           bz      isbs                ; jump if so
+           smi     5                   ; check for <CR>
+           bz      inpdone             ; jump if so
+           glo     rc                  ; check count
+           bnz     inpcnt              ; jump if can continue
+           ghi     rc                  ; check high of count
+           bnz     inpcnt
+           ldi     8                   ; performa backspace
+           sep     scall
+           dw      type
+           br      bs2                 ; remove char from screen
+inpcnt:    glo     re
            str     rf                  ; store into output
            inc     rf                  ; point to next position
            smi     08                  ; look for backspace
            bnz     nobs                ; jump if not a backspace
-           glo     ra                  ; get input count
+isbs:      glo     ra                  ; get input count
            bz      inplp               ; disregard if string is empty
            dec     ra                  ; decrement the count
            dec     rf                  ; decrement buffer position
-           dec     rf
+           inc     rc                  ; increment allowed characters
+bs2:       ldi     32                  ; display a space
+           sep     scall
+           dw      type
+           ldi     8                   ; then backspace again
+           sep     scall
+           dw      type
            br      inplp               ; and loop back for more
-nobs:      smi     05                  ; check for CR
-           bz      inpdone             ; loop back if not
-           inc     ra                  ; increment input count
+nobs:      inc     ra                  ; increment input count
+           dec     rc                  ; decrement character count
            br      inplp               ; and then loop back
 inpdone:   ldi     0                   ; need a zero terminator
-           str     rf                  ; store into buffer
+           shr                         ; reset DF flag, to show valid input
+inpdone2:  str     rf                  ; store into buffer
            irx                         ; recover RA
            ldxa
            phi     ra
            ldx
            plo     ra
            sep     sret                ; return to caller
-
+inpterm:   ldi     1                   ; signal <CTRL><C> exit
+           shr
+           ldi     0                   ; finish
+           br      inpdone2
+          
 
 ; *****************************************************
 ; *** Function to implement a stack based call      ***
@@ -1434,34 +1582,8 @@ inpdone:   ldi     0                   ; need a zero terminator
 ; ***    usage is:    sep R4                        ***
 ; ***                 dw  call_addr                 ***
 ; *****************************************************
-         org     0ffdfh
-         sep     r3                    ; jump to called routine
-call:    plo     re                    ; Save D
-         ghi     r6                    ; save last R[6] to stack
-         stxd
-         glo     r6
-         stxd
-         ghi     r3                    ; copy R[3] to R[6]
-         phi     r6
-         glo     r3
-         plo     r6
-         lda     r6                    ; get subroutine address
-         phi     r3                    ; and put into r3
-         lda     r6
-         plo     r3
-         glo     re                    ; recover D
-         br      call-1                ; transfer control to subroutine
+         org     0ffe0h
+         lbr     call
+         org     0fff1h
+         lbr     ret
 
-         sep     r3                    ; transfer control back to coller
-ret:     plo     re                    ; Save D
-         ghi     r6                    ; copy R[6] to R[3]
-         phi     r3
-         glo     r6
-         plo     r3
-         irx                           ; point to old R[6]
-         ldxa
-         plo     r6
-         ldx
-         phi     r6
-         glo     re
-         br      ret-1                 ; and perform return to caller
