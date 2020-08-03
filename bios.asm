@@ -86,7 +86,7 @@ atoilp:    ldn     rf                  ; get byte from input
            ghi     rc
            str     r2
            ghi     rd
-           add
+           adc
            phi     rd
            glo     rd                  ; multiply by 10
            shl
@@ -724,29 +724,37 @@ drqloop:   inp     3                   ; read status register
 
 	org	0fc00h
            sep     r3
-delay:     ghi     re
-           shr
-           plo     re
-           sex     r2
-delay1:    dec     re
-           glo     re
-           bz      delay-1
-           br      delay1
+delay:     ghi     re                  ; get baud constant
+           shr                         ; remove echo flag
+           plo     re                  ; put into counter
+           sex     r2                  ; waste a cycle
+delay1:    dec     re                  ; decrement counter
+           glo     re                  ; get count
+           bz      delay-1             ; return if zero
+           br      delay1              ; otherwise keep going
 
-timalc:    ldi     0                   ; zero counter 1
+timalc:    glo     rb                  ; save consumed registesr
+           stxd
+           ghi     rb
+           stxd
+           glo     rc
+           stxd
+           ghi     rc
+           stxd
+           ldi     0                   ; zero counter 1
            phi     rc
            plo     rc
            phi     rb                  ; and counter 2
            plo     rb
-           b2      $                   ; wait until start bit found
+           b4      $                   ; wait until start bit found
 setbd1:    inc     rc
            sex     r2
            sex     r2
-           bn2     setbd1              ; wait until another high
+           bn4     setbd1              ; wait until another high
 setbd2:    inc     rb
            sex     r2
            sex     r2
-           b2      setbd2              ; wait til the next low
+           b4      setbd2              ; wait til the next low
            glo     rb                  ; compare values
            shr                         ; quantize over small differences
            shr     
@@ -763,13 +771,22 @@ setbd2:    inc     rb
 setbd3:    ldi     1
            phi     rb
            glo     rc
-           smi     5
+           smi     4
            phi     re
            ghi     rb
            shr     
            ghi     re
            shlc    
            phi     re
+           irx                         ; recover consumed registesr
+           ldxa
+           phi     rc
+           ldxa
+           plo     rc
+           ldxa
+           phi     rb
+           ldx
+           plo     rb
            sep     sret
 
 type:      plo     re
@@ -826,7 +843,7 @@ read:      glo     rf
            stxd
            ghi     rd
            stxd
-           ldi     9                   ; 8 bits to receive
+           ldi     8                   ; 8 bits to receive
            plo     rf
            ldi     high delay
            phi     rd
@@ -835,9 +852,9 @@ read:      glo     rf
            ghi     re                  ; first delay is half bit size
            phi     rf
            shr
-           shr
+           smi     01
            phi     re
-           b2      $                   ; wait for transmission
+           b4      $                   ; wait for transmission
            sep     rd                  ; wait half the pulse width
            ghi     rf                  ; recover baud constant
            phi     re
@@ -845,7 +862,7 @@ read:      glo     rf
            bdf     recvlpe
 recvlp:    ghi     rf
            shr                         ; shift right
-           bn2     recvlp0             ; jump if zero bi
+           bn4     recvlp0             ; jump if zero bi
            ori     128                 ; set bit
 recvlp1:   phi     rf
            sep     rd                  ; perform bit delay
@@ -869,12 +886,13 @@ recvdone:  req
            ldx
            plo     rf
            glo     re
+           shr
            sep     sret                ; and return to caller
 recvlp0:   br      recvlp1             ; equalize between 0 and 1
 
 recvlpe:   ghi     rf
            shr                         ; shift right
-           bn2     recvlpe0            ; jump if zero bi
+           bn4     recvlpe0            ; jump if zero bi
            ori     128                 ; set bit
            req
 recvlpe1:  phi     rf
@@ -1094,13 +1112,13 @@ tty:       plo     re                  ; save character
 ttyend:    lbr     type                ; and display character
 ttyff:     ldi     01bh                ; <ESC>
            sep     scall               ; display it
-           dw      f_type
+           dw      type
            ldi     '['
            sep     scall               ; display it
-           dw      f_type
+           dw      type
            ldi     '2'
            sep     scall               ; display it
-           dw      f_type
+           dw      type
            ldi     'J'
            br      ttyend
 
