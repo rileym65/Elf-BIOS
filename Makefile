@@ -1,6 +1,8 @@
-bios.prg: bios.asm
-	rcasm -l -v -x -d 1802 bios
+PROJECT = bios
+
+$(PROJECT).prg: $(PROJECT).asm
+	rcasm -l -v -x -d 1802 $(PROJECT)
 
 clean:
-	-rm bios.prg
+	-rm $(PROJECT).prg
 

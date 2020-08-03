@@ -2,7 +2,8 @@ data:   equ     0
 
         org     0ff00h
 return: sep     r5
-call:   smi     01h          ; check for type  (01)
+bios:   lbz     boot         ; jump if cold boot (00)
+        smi     01h          ; check for type  (01)
         lbz     type         ; jump to type6 routine
         smi     01h          ; check for get char (02)
         lbz     read
@@ -44,7 +45,47 @@ ret4:    glo   r4
          phi   r5
          br   return
 
+; *****************************************************
+; *** Function to implement a stack based call      ***
+; ***    R5 is assumed to be the main PC            ***
+; ***    R2 is assumed to be the stack pointer      ***
+; ***    RF is consumed                             ***
+; ***    usage is:    sep R4                        ***
+; ***                 dw  call_addr                 ***
+; *** Routine saves R5 values onto the stack        ***
+; *** and and sets it to the call address           ***
+; *****************************************************
+         org     0ffdfh
+         sep     r5                    ; jump to called routine
+call:    phi     rf                    ; save D
+         sex     r2                    ; set x to stack segment
+         lda     r5                    ; get high byte and advance to low
+         plo     rf                    ; save it
+         inc     r5                    ; move past low address
+         glo     r5                    ; get low value of return address
+         stxd                          ; store onto stack
+         ghi     r5                    ; get high value of return address
+         stxd                          ; and place onto stack
+         dec     r5                    ; point to low byte
+         ldn     r5                    ; get low byte
+         plo     r5                    ; and place into low byte of PC
+         glo     rf                    ; recover high byte
+         phi     r5                    ; put into high of PC
+         ghi     rf                    ; recover D
+         br      call-1                ; transfer control to subroutine
+
+         sep     r5                    ; transfer control back to coller
+ret:     phi     rf                    ; save return value
+         inc     r2                    ; point to high byte of return address
+         lda     r2                    ; get high byte
+         phi     r5                    ; put into register 5
+         ldn     r2                    ; get low byte
+         plo     r5                    ; put into low
+         ghi     rf                    ; recall return value
+         br      ret-1                 ; and perform return to caller
+
          org     0fe00h
+
 ; **** Write sector to disk, R(6) points to data
 ; ****    R(6) must point to an even 256 byte boundary
 ; ****    RC.0 = sector
@@ -71,10 +112,19 @@ wrtsec:  ldi     low data    ; get address of scratchpad
          out     3           ; send write command
          out     2           ; select data port
          sex     r6          ; point data register to data
-wrtlp:   b2      $           ; wait til disk controller has a byte
-         out     3           ; write data to disk controller
-         glo     r6          ; get low byte
-         bnz     wrtlp       ; loop until 256 bytes read
+wrtlp:   b2      $
+         out     3
+         glo     r6
+         bnz     wrtlp
+
+;wrtgo:   ldi     255         ; set timeout timer
+;wrtlp:   bn2     wrtrdy      ; jump if byte is ready to write
+;         smi     1           ; subtract 1 from timeout
+;         bnz     wrtlp       ; loop back if still more time
+;         br      dskstat     ; get disk status
+;wrtrdy:  out     3           ; write byte to controller
+;         glo     r6          ; get number of bytes
+;         bnz     wrtgo       ; jump if more bytes to write
 dskstat: ldi     0           ; status port
          str     rf          ; write to scratchpad
          sex     rf          ; point data register to scratchpad
@@ -112,11 +162,20 @@ rdsec:   ldi     low data    ; get address of scratchpad
          out     3           ; send write command
          out     2           ; select data port
          sex     r6          ; point data register to data
-rdlp:    b2      $           ; wait til disk controller has a byte
-         inp     3           ; read data from disk controller
-         irx                 ; increment data pointer
-         glo     r6          ; get low byte
-         bnz     rdlp        ; loop until 256 bytes read
+rdlp:    b2      $
+         inp     3
+         irx
+         glo     r6
+         bnz     rdlp
+;rdgo:    ldi     255         ; set timeout value
+;rdlp:    bn2     rdeady      ; jump if byte ready to read
+;         smi     1           ; subtract 1 from timeout
+;         bnz     rdlp        ; check again if time left
+;         br      dskstat     ; error occured, return status
+;rdeady:  inp     3           ; read byte from controller
+;         irx                 ; increment pointer
+;         glo     r6          ; get pointer
+;         bnz     rdgo        ; loop until 256 bytes read
          br      dskstat     ; jump to get status
 
 ; **** Select Drive
@@ -133,7 +192,7 @@ drvsel:  ldi     low data    ; get address of scratchpad
          str     rf          ; store into command buffer
          out     2           ; write drive select to selector
          out     3           ; write drive select register
-         br      return      ; return to caller
+         lbr     return      ; return to caller
 
 ; **** Restore to track 0
 trk0:    ldi     low data    ; get address of scratchpad
@@ -172,6 +231,29 @@ seek:    ldi     low data    ; get address of scratchpad
          out     2           ; write command port to selector
          out     3           ; output the command
          br      dskstat     ; branch to get command status
+
+; **** Boot drive 0, track 0, sector 0 ****
+boot:    ldi     low boot1   ; get address of boot routine
+         plo     r5          ; place into r5
+         ldi     high boot1  ; get high part
+         phi     r5          ; and place into register
+         sep     r5          ; transfer to new program counter
+boot1:   ldi     low call    ; get address of bios table
+         plo     r3          ; place into r3
+         ldi     high call   ; high portion
+         phi     r3          ; place into register
+         ldi     12          ; function to seek to track 0
+         sep     r3          ; perform seek
+         ldi     01          ; high portion of disk buffer address
+         phi     r6          ; place into r6
+         plo     r0          ; place into start register as well
+         ldi     00          ; address of disk buffer
+         plo     r6          ; place into r6
+         plo     r0          ; place into start register as well
+         plo     rc          ; also place 0 into sector number
+         ldi     11          ; bios function to read disk sector
+         sep     r3          ; read the sector
+         sep     r0          ; transfer control to read sector
 
          org     0fd00h
 ; **** Strcmp compares the strings pointing to by R(6) and R(X)
