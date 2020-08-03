@@ -1,3 +1,5 @@
+scall:      equ  r4
+sret:       equ  r5
 call:       equ  0ffe0h
 ret:        equ  0fff1h
 f_boot:     equ  0ff00h
@@ -23,3 +25,8 @@ f_idewrite: equ  0ff39h
 f_ideread:  equ  0ff3ch
 f_initcall: equ  0ff3fh
 f_bootide:  equ  0ff42h
+f_hexin:    equ  0ff45h
+f_hexout2:  equ  0ff48h
+f_hexout4:  equ  0ff4bh
+f_tty:      equ  0ff4eh
+

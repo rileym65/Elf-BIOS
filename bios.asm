@@ -4,7 +4,7 @@ sret:   equ     r5
 
            org     0ff00h
 f_boot:    lbr     boot
-f_type:    lbr     type
+f_type:    lbr     tty
 f_read:    lbr     read
 f_msg:     lbr     typemsg
 f_typex:   lbr     return
@@ -26,6 +26,11 @@ f_idewrt:  lbr     wrtide
 f_ideread: lbr     rdide
 f_initcall: lbr    initcall
 f_ideboot: lbr     bootide
+f_hexin:   lbr     hexin
+f_hexout2: lbr     hexout2
+f_hexout4: lbr     hexout4
+f_tty:     lbr     type
+f_mover:   lbr     mover
 
 return:    sep     sret                ; return to caller
 
@@ -464,6 +469,26 @@ divno:     ghi     rd                  ; get hi of divisor
            plo     r8
            br      divst               ; next iteration
 
+; *****************************************************
+; *** Serial output with 0C translation to <ESC>[2J ***
+; *****************************************************
+tty:       plo     re                  ; save character
+           smi     0ch                 ; compare against formfeed
+           bz      ttyff               ; jump if formfeed
+           glo     re                  ; recover byte
+ttyend:    lbr     type                ; and display character
+ttyff:     ldi     01bh                ; <ESC>
+           sep     scall               ; display it
+           dw      f_type
+           ldi     '['
+           sep     scall               ; display it
+           dw      f_type
+           ldi     '2'
+           sep     scall               ; display it
+           dw      f_type
+           ldi     'J'
+           br      ttyend
+
 	org	0fc00h
 ; *** Software uart is adapted from that found in IDIOT/4
 ; *** I will probably have to change this in the future.
@@ -878,6 +903,161 @@ bootret:   sep     scall               ; reset ide drive
            ldi     1
            phi     r0
            ldi     0
+           plo     r0
+           sep     r0
+
+           org   0fa00h
+; ***************************************************************
+; *** Function to convert hex input characters to binary      ***
+; *** RF - Pointer to characters                              ***
+; *** Returns - RF - First character that is not alphanumeric ***
+; ***           RD - Converted number                         ***
+; ***************************************************************
+hexin:     ldi     0                   ; set initial total
+           phi     rd
+           plo     rd
+tobinlp:   ldn     rf                  ; get input character
+           smi     '0'                 ; see if less than zero
+           bnf     tobindn             ; jump if not alphanumeric
+           smi     10                  ; see if numeric
+           bnf     tobinnm             ; jump if it is numeric
+           smi     7                   ; look for 'A'
+           bnf     tobindn             ; jump if below A
+           smi     6                   ; look for 'F'
+           bnf     tobinal             ; jump if alphabetic
+           smi     26                  ; check for 'a'
+           bnf     tobindn             ; jump if below A
+           smi     6                   ; check for 'f'
+           bdf     tobindn             ; jump if done
+           ldi     87
+           lskp
+tobinal:   ldi     55
+           lskp
+tobinnm:   ldi     30h
+           stxd
+           irx
+           lda     rf
+           sm
+tobingo:   stxd                        ; save number
+           ldi     4                   ; need to multiply by 16
+tobinglp:  stxd
+           glo     rd                  ; multiply by 2
+           shl
+           plo     rd
+           ghi     rd
+           shlc
+           phi     rd
+           irx
+           ldi     1
+           sd
+           bnz     tobinglp
+           irx                         ; point to new number
+           glo     rd                  ; and add to total
+           add
+           plo     rd
+           ghi     rd
+           adci    0
+           phi     rd
+           br      tobinlp             ; loop back for next character
+tobindn:   sep     sret                ; return to caller
+
+; *********************************************
+; *** Convert a binary number to hex output ***
+; *** RD - Number to convert                ***
+; *** RF - Buffer for output                ***
+; *** Returns: RF - next buffer position    ***
+; ***          RD - consumed                ***
+; *********************************************
+hexout2:   glo     rd                  ; move low byte to high
+           phi     rd
+           ldi     2                   ; 2 nybbles to display
+           lskp                        ; skip over the 4
+hexout4:   ldi     4                   ; 4 nybbles to display
+hexoutlp:  stxd                        ; save the count
+           ldi     0                   ; zero the temp var
+           plo     re
+           ldi     4                   ; perform 4 shift
+hexoutl2:  stxd                        ; save count
+           glo     rd                  ; perform shift
+           shl
+           plo     rd
+           ghi     rd
+           shlc
+           phi     rd
+           glo     re
+           shlc
+           plo     re
+           irx                         ; point back to count
+           ldi     1                   ; need to decrement it
+           sd
+           bnz     hexoutl2            ; jump if more shifts needed
+           glo     re                  ; get nybble
+           smi     10                  ; compare to 10
+           bnf     hexoutal            ; jump if alpha
+           glo     re                  ; get value
+           adi     30h                 ; convert to ascii
+hexoutl3:  str     rf                  ; store value into buffer
+           inc     rf
+           irx                         ; point to count
+           ldi     1                   ; need to subtract 1 from it
+           sd
+           bnz     hexoutlp            ; loop if not done
+hexoutal:  glo     re                  ; get value
+           adi     55                  ; convert to ascii
+           br      hexoutl3            ; and continue
+
+;
+; MOVER.ASM - Function Move Programs Into Low memory
+; For Execution.
+;
+; Normal Entry PC = 3, RF = Program Header
+;
+; Exit: Starts Program at specified address
+; With P=0,X=0,IE=1
+;
+; This module written by Richard Peters
+;*********************************************************
+; HEADER DEFINITION ANY ADDRESS
+; OFFSET
+;  00   = Program RAM Start Address
+; +02   = Program RAM End Address
+; +04   = Program Execution Address
+; +06   = Accual PROGRAM Bytes
+;*********************************************************
+           org   0fadah
+mover:     sex     r0
+           lda     rf
+           phi     r0
+           lda     rf
+           plo     r0
+           lda     rf
+           phi     r1
+           lda     rf
+           plo     r1
+           inc     r1
+           lda     rf
+           phi     ra
+           lda     rf
+           plo     ra
+moverlp:   lda     rf
+           str     r0
+           inc     r0
+           glo     r1
+           str     r0
+           glo     r0
+           sd
+           bnz     moverlp
+           ghi     r1
+           str     r0
+           ghi     r0
+           sd
+           bnz     moverlp
+           ldi     3
+           str     r0
+           ret
+           ghi     ra
+           phi     r0
+           glo     ra
            plo     r0
            sep     r0
 
