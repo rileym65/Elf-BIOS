@@ -19,4 +19,7 @@ function    14  - Select Drive
 function    15  - Determine terminal baud rate
 function    16  - 8-bit by 8-bit multiply
 function    17  - 16-bit by 16-bit divide
+function    18  - perform ide reset
+function    19  - write ide sector
+function    20  - read ide sector
 
