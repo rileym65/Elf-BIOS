@@ -1,0 +1,19 @@
+Bios entry point FF01h
+
+Function in D
+
+function    01  - Type character in RF.0
+function    02  - Read character into D
+function    03  - Type message pointed to by R6, 0 terminated
+function    04  - Type character from M(R[6]), increment R[6].
+function    05  - Input, buffer pointed to by R6
+function    06  - Compare strings pointed to bye R[6] and R[X].
+function    07  - Left trim string pointed to by R[X]
+function    08  - string copy R[X] to R[6], terminates on 0
+function    09  - Memory copy R[X] to R[6], R[F] holds count
+function    10  - Write disk sector
+function    11  - Read disk sector
+function    12  - Seek to track 0
+function    13  - Seek to track
+function    14  - Select Drive
+
