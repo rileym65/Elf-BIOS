@@ -29,4 +29,11 @@ f_hexin:    equ  0ff45h
 f_hexout2:  equ  0ff48h
 f_hexout4:  equ  0ff4bh
 f_tty:      equ  0ff4eh
+f_mover:    equ  0ff51h
+f_minimon:  equ  0ff54h
+f_freemem:  equ  0ff57h
+f_isnum:    equ  0ff5ah
+f_atoi:     equ  0ff5dh
+f_uintout:  equ  0ff60h
+f_intout:   equ  0ff63h
 
