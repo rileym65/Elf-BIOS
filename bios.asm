@@ -6,8 +6,9 @@
 ; *** without express written permission from the author.         ***
 ; *******************************************************************
 
-#define SERP    b4
-#define SERN    bn4
+; #define ELF2K
+#define SERP    b2
+#define SERN    bn2
 
 data:   equ     0
 scall:  equ     r4
@@ -18,19 +19,16 @@ sret:   equ     r5
 ; *** D - char to check
 ; *** Returns DF=1 if numeric
 ; ***         DF=0 if not
-isnum:     sex     r2                  ; be sure x points to stack
-           stxd                        ; save number
-           smi     '0'                 ; check for bottom of numbers
-           bnf     isnotnum            ; jump if not a number
-           smi     10                  ; check high end
-           bdf     isnotnum            ; jump if not a number
-           ldi     1                   ; numer is numeric
-           lskp    
-isnotnum:  ldi     0                   ; signal not a number
-           shr                         ; shift result into DF
-           irx                         ; recover original value
-           ldx     
-           sep     sret                ; and return to caller
+isnum:     plo     re                  ; save a copy
+           smi     '0'                 ; check for below zero
+           bnf     fails               ; jump if below
+           smi     10                  ; see if above
+           bdf     fails               ; fails if so
+passes:    smi     0                   ; signal success
+           lskp
+fails:     adi     0                   ; signal failure
+           glo     re                  ; recover character
+           sep     sret                ; and return
 
 ; *** rf - pointer to ascii string
 ; *** returns: rf - first non-numeric character
@@ -401,14 +399,19 @@ hexin:     ldi     0                   ; set initial total
            plo     rd
 tobinlp:   lda     rf                  ; get input character
            smi     '0'                 ; convert to binary
-           ani     0dfh                ; convert to uc
            bnf     tobindn             ; jump if termination
            stxd
-           ani     16                  ; check for alpha
+           ani     0f0h                ; check for alpha
            irx                         ; point back
            bz      isnumeric
            ldx                         ; recover byte
-           smi     7                   ; offset
+           smi     49                  ; see if lowercase
+           bnf     hexgo
+           ldx                         ; get byte
+           smi     32                  ; convert to uppercase
+           br      hexgo2              ; and continue
+hexgo:     ldx                         ; recover byte
+hexgo2:    smi     7                   ; offset
            br      tobingo             ; and continue
 isnumeric: ldx                         ; recover byte
            smi     10                  ; check for end of numbers
@@ -418,7 +421,7 @@ tobingo:   stxd                        ; save number
            smi     16                  ; check for valid range
            bnf     tobingd             ; jump if good
            irx                         ; remove number from stack
-           sep     sret                ; return to caller
+           br      tobindn
 tobingd:   ldi     4                   ; need to multiply by 16
 tobinglp:  stxd
            glo     rd                  ; multiply by 2
@@ -439,7 +442,8 @@ tobinglp:  stxd
            adci    0
            phi     rd
            br      tobinlp             ; loop back for next character
-tobindn:   sep     sret                ; return to caller
+tobindn:   dec     rf                  ; move back to terminating character
+           sep     sret                ; return to caller
 
 ; *********************************************
 ; *** Convert a binary number to hex output ***
@@ -520,6 +524,44 @@ ret:     plo     re                    ; Save D
          phi     r6
          glo     re
          br      ret-1                 ; and perform return to caller
+
+; ********************************
+; *** See if D is alphabetic   ***
+; *** Returns DF=0 - not alpha ***
+; ***         DF=1 - is alpha  ***
+; ********************************
+isalpha:   plo     re                  ; save copy of do
+           smi     'A'                 ; check uc letters
+           lbnf    fails               ; jump if below A
+           smi     27                  ; check upper range
+           lbnf    passes              ; jump if valid
+           glo     re                  ; recover character
+           smi     'a'                 ; check lc letters
+           lbnf    fails               ; jump if below A
+           smi     27                  ; check upper range
+           lbnf    passes              ; jump if valid
+           lbr     fails
+
+; **********************************
+; *** check D if hex             ***
+; *** Returns DF=1 - hex         ***
+; ***         DF=0 - non-hex     ***
+; **********************************
+ishex:     sep     scall               ; see if it is numeric
+           dw      isnum
+           plo     re                  ; keep a copy
+           lbdf    passes              ; jump if it is numeric
+           smi     'A'                 ; check for below uppercase a
+           lbnf    fails               ; value is not hex
+           smi     6                   ; check for less then 'G'
+           lbnf    passes              ; jump if so
+           glo     re                  ; recover value
+           smi     'a'                 ; check for lowercase a
+           lbnf    fails               ; jump if not
+           smi     6                   ; check for less than 'g'
+           lbnf    passes              ; jump if so
+           lbr     fails
+
 ;
 ; MOVER.ASM - Function Move Programs Into Low memory
 ; For Execution.
@@ -772,6 +814,7 @@ drqloop:   inp     3                   ; read status register
            br      beforerdy           ; return, readying waitrdy again
 ; the branch to beforerdy, allows us to use waitrdy again
 
+
 	org	0fc00h
            sep     r3
 delay:     ghi     re                  ; get baud constant
@@ -1023,6 +1066,26 @@ recvlpe0:  seq
 #endif
 
 
+brktest:   adi     0                   ; clear DF flag
+           SERP    nobreak
+           SERN    $
+           smi     0                   ; signal break condition on serial
+nobreak:   sep     sret                ; and return
+
+; *****************************************************
+; *** Serial output with 0C translation to <ESC>[2J ***
+; *****************************************************
+tty:       plo     re                  ; save character
+           smi     0ch                 ; compare against formfeed
+           bz      ttyff               ; jump if formfeed
+           glo     re                  ; recover byte
+ttyend:    lbr     type                ; and display character
+ttyff:     sep     scall               ; display vt100 sequence to clear screen
+           dw      typeinmsg
+           db      01bh,'[2J',0
+           sep     sret                ; and return to caller
+
+
 initcall:  ldi     high ret
            dec     r2
            dec     r2
@@ -1218,195 +1281,144 @@ divno:     ghi     rd                  ; get hi of divisor
            plo     r8
            br      divst               ; next iteration
 
-; *****************************************************
-; *** Serial output with 0C translation to <ESC>[2J ***
-; *****************************************************
-tty:       plo     re                  ; save character
-           smi     0ch                 ; compare against formfeed
-           bz      ttyff               ; jump if formfeed
-           glo     re                  ; recover byte
-ttyend:    lbr     type                ; and display character
-ttyff:     ldi     01bh                ; <ESC>
-           sep     scall               ; display it
-           dw      type
-           ldi     '['
-           sep     scall               ; display it
-           dw      type
-           ldi     '2'
-           sep     scall               ; display it
-           dw      type
-           ldi     'J'
-           br      ttyend
+ttyold:    lbr     tty
+
+; *****************************************
+; *** See if D is alphanumeric          ***
+; *** Returns: DF=0 - not valid         ***
+; ***          DF=1 - is valid          ***
+; *****************************************
+isalnum:   plo     re                  ; keep copy of D
+           sep     scall               ; check if numeric
+           dw      isnum
+           lbdf    passes              ; jump if numeric
+           sep     scall               ; check for alpha
+           dw      isalpha
+           lbdf    passes              ; jump if alpha
+           lbr     fails               ; otherwise fails
+
+; ***********************************
+; *** Check for symbol terminator ***
+; *** Returns: DF=1 - terminator  ***
+; ***********************************
+isterm:    sep     scall               ; see if alphanumeric
+           dw      isalnum
+           lbdf    fails               ; fails if so
+           lbr     passes
 
          org     0fe00h
-; **** Write sector to disk, R(6) points to data
-; ****    R(6) must point to an even 256 byte boundary
-; ****    RC.0 = sector
-; ****  Returns: D - write status
-wrtsec:  ldi     low data    ; get address of scratchpad
-         adi     4           ; point to end of command
-         plo     rf          ; register to use to write temp data
-         ldi     high data   ; get high address of scratchpad
-         phi     rf          ; write to register
-         sex     rf          ; point data register to command buffer
-         ldi     3           ; data register address
-         stxd                ; write to command
-         ldi     0a4h        ; command to initiate writing
-         stxd                ; write to command
-         ldi     0           ; command register address
-         stxd                ; write to command
-         glo     rc          ; get sector
-         stxd                ; write to command
-         ldi     2           ; sector register address
-         str     rf          ; write to command port
-         out     2           ; write sector register to selector
-         out     3           ; send sector
-         out     2           ; write command register to selector
-         out     3           ; send write command
-         out     2           ; select data port
-         sex     r6          ; point data register to data
-wrtlp:   b2      $
-         out     3
-         glo     r6
-         bnz     wrtlp
+; ******************************************
+; *** Check if symbol is in symbol table ***
+; *** RF - pointer to ascii symbol       ***
+; *** R7 - pointer to token table        ***
+; *** Returns: RD - function number      ***
+; ***          DF=1 - is function        ***
+; ***          DF=0 - is not a function  ***
+; ******************************************
+tokenfunc: glo     r7                  ; save position of R7
+           stxd
+           ghi     r7
+           stxd
+           glo     rb                  ; save other consumed register
+           stxd
+           ghi     rb
+           stxd
+           ldi     0                   ; setup function number
+           plo     rd
+           ghi     rf                  ; save buffer position
+           phi     rb
+           glo     rf
+           plo     rb
+tfloop:    ldn     r7                  ; see if at last token
+           bnz     tfgo                ; jump if not
+           adi     0                   ; signal symbol not found
+tfreturn:  irx                         ; recover consumed registers
+           ldxa
+           phi     rb
+           ldxa
+           plo     rb
+           ldxa
+           phi     r7
+           ldx
+           plo     r7
+           sep     sret                ; and return
+tfgo:      ldn     r7                  ; get token byte
+           ani     080h                ; see if last one
+           bnz     tflast              ; jump if it was
+           lda     r7                  ; get byte from function table
+           str     r2                  ; setup compare
+           lda     rf                  ; get byte from input
+           sm                          ; and compare
+           bz      tfgo                ; loop back if match
+tfnolp:    lda     r7                  ; need to find end of token
+           ani     080h
+           bz      tfnolp              ; loop until found
+tfno:      inc     rd                  ; increment function number
+           ghi     rb                  ; restore buffer position
+           phi     rf
+           glo     rb
+           plo     rf
+           br      tfloop              ; loop to check next token
+tflast:    lda     r7                  ; get byte from token
+           ani     07fh                ; strip high bit
+           str     r2                  ; store for compare
+           lda     rf                  ; get byte from buffer
+           sm                          ; and see if a match
+           bnz     tfno                ; jump if not
+           smi     0                   ; signal match found
+           br      tfreturn            ; and return
 
-;wrtgo:   ldi     255         ; set timeout timer
-;wrtlp:   bn2     wrtrdy      ; jump if byte is ready to write
-;         smi     1           ; subtract 1 from timeout
-;         bnz     wrtlp       ; loop back if still more time
-;         br      dskstat     ; get disk status
-;wrtrdy:  out     3           ; write byte to controller
-;         glo     r6          ; get number of bytes
-;         bnz     wrtgo       ; jump if more bytes to write
-dskstat: ldi     0           ; status port
-         str     rf          ; write to scratchpad
-         sex     rf          ; point data register to scratchpad
-         out     2           ; select status port
-         dec     rf          ; point to scratch area
-statlp:  inp     3           ; read status
-         shr                 ; shift busy bit into DF
-         bdf     statlp      ; loop until no longer busy
-         shl                 ; shift back into position
-         sep     sret        ; return status code
+; ***********************************************
+; *** identify symbol as decimal, hex, or non ***
+; *** RF - pointer to symbol                  ***
+; *** Returns: D=0 - decimal number           ***
+; ***          D=1 - hex number               ***
+; ***          DF=1 - non numeric             ***
+; ***          DF=0 - is numeric              ***
+; ***********************************************
+idnum:     glo     rf                  ; save position
+           stxd
+           ghi     rf
+           stxd
+           ldn     rf                  ; get first byte
+           sep     scall               ; must be numeric
+           dw      isnum
+           bdf     idlp1               ; jump if it was
+idnumno:   smi     0                   ; signal non-numeric
+           lskp
+idnumyes:  adi     0                   ; signal numeric
+           irx                         ; recover RF
+           ldxa
+           phi     rf
+           ldx
+           plo     rf
+           sep     sret                ; and return to caller
+idlp1:     lda     rf                  ; get next byte
+           sep     scall               ; check for symbol terminator
+           dw      isterm
+           bdf     iddec               ; signal decimal number
+           sep     scall               ; see if char is numeric
+           dw      isnum
+           bdf     idlp1               ; jump if so
+           dec     rf                  ; move back to char
+idlp2:     lda     rf                  ; get next byte
+           sep     scall               ; see if terminator
+           dw      isterm
+           bdf     idnumno             ; jump if term found before h
+           sep     scall               ; check for hex character
+           dw      ishex
+           bdf     idlp2               ; loop back if so
+           smi     'H'                 ; check for final H
+           bz      idhex               ; jump if hex
+           smi     32                  ; check for h
+           bz      idhex
+           br      idnumno             ; was not proper number
+iddec:     ldi     0                   ; signal decimal number
+           br      idnumyes            ; and return
+idhex:     ldi     1                   ; signal hex number
+           br      idnumyes            ; and return
 
-; **** Read sector from disk, R(6) points to buffer
-; ****    R(6) must point to an even 256 byte boundary
-; ****    RC.0 = sector
-; ****  Returns: D - read status
-rdsec:   ldi     low data    ; get address of scratchpad
-         adi     4           ; point to end of command
-         plo     rf          ; register to use to write temp data
-         ldi     high data   ; get high address of scratchpad
-         phi     rf          ; write to register
-         sex     rf          ; point data register to command buffer
-         ldi     3           ; data register address
-         stxd                ; write to command
-         ldi     084h        ; command to initiate reading
-         stxd                ; write to command
-         ldi     0           ; command register address
-         stxd                ; write to command
-         glo     rc          ; get sector
-         stxd                ; write to command
-         ldi     2           ; sector register address
-         str     rf          ; write to command port
-         out     2           ; write sector register to selector
-         out     3           ; send sector
-         out     2           ; write command register to selector
-         out     3           ; send write command
-         out     2           ; select data port
-         sex     r6          ; point data register to data
-rdlp:    b2      $
-         inp     3
-         irx
-         glo     r6
-         bnz     rdlp
-;rdgo:    ldi     255         ; set timeout value
-;rdlp:    bn2     rdeady      ; jump if byte ready to read
-;         smi     1           ; subtract 1 from timeout
-;         bnz     rdlp        ; check again if time left
-;         br      dskstat     ; error occured, return status
-;rdeady:  inp     3           ; read byte from controller
-;         irx                 ; increment pointer
-;         glo     r6          ; get pointer
-;         bnz     rdgo        ; loop until 256 bytes read
-         br      dskstat     ; jump to get status
 
-; **** Select Drive
-; ****   RC.0 = drive (1=drive 1,2=drive 2,4=drive 3,8=drive 4)
-drvsel:  ldi     low data    ; get address of scratchpad
-         adi     4           ; point to end of command
-         plo     rf          ; register to use to write temp data
-         ldi     high data   ; get high address of scratchpad
-         phi     rf          ; write to register
-         sex     rf          ; point data register to command buffer
-         glo     rc          ; get requested drive
-         stxd                ; store into command buffer
-         ldi     4           ; drive select register
-         str     rf          ; store into command buffer
-         out     2           ; write drive select to selector
-         out     3           ; write drive select register
-         sep     sret        ; return to caller
-
-; **** Restore to track 0
-trk0:    ldi     low data    ; get address of scratchpad
-         adi     4           ; point to end of command
-         plo     rf          ; register to use to write temp data
-         ldi     high data   ; get high address of scratchpad
-         phi     rf          ; write to register
-         sex     rf          ; point data register to command buffer
-         ldi     09          ; command to do a disk restore
-         stxd                ; write to command buffer
-         ldi     0           ; command port
-         str     rf          ; write to command port
-         out     2           ; write command register to selector
-         out     3           ; issue restore command
-         br      dskstat     ; branch to get diskstat
-
-; **** Seek to track
-; ****    RC.0 = track
-; ****  Returns: D - read status
-seek:    ldi     low data    ; get address of scratchpad
-         adi     4           ; point to end of command
-         plo     rf          ; register to use to write temp data
-         ldi     high data   ; get high address of scratchpad
-         phi     rf          ; write to register
-         sex     rf          ; point data register to command buffer
-         ldi     19h         ; command to do a disk seek
-         stxd                ; write to command buffer
-         ldi     0           ; command port
-         stxd                ; write to command buffer
-         glo     rc          ; get passed track
-         stxd                ; write to command buffer
-         ldi     3           ; data register selector
-         str     rf          ; write to command port
-         out     2           ; write data port to selector
-         out     3           ; write track to data register
-         out     2           ; write command port to selector
-         out     3           ; output the command
-         br      dskstat     ; branch to get command status
-
-; **** Boot drive 0, track 0, sector 0 ****
-boot:    ldi     low boot1   ; get address of boot routine
-         plo     r5          ; place into r5
-         ldi     high boot1  ; get high part
-         phi     r5          ; and place into register
-         sep     r5          ; transfer to new program counter
-boot1:   ldi     low call    ; get address of bios table
-         plo     r3          ; place into r3
-         ldi     high call   ; high portion
-         phi     r3          ; place into register
-         ldi     12          ; function to seek to track 0
-         sep     r3          ; perform seek
-         ldi     01          ; high portion of disk buffer address
-         phi     r6          ; place into r6
-         plo     r0          ; place into start register as well
-         ldi     00          ; address of disk buffer
-         plo     r6          ; place into r6
-         plo     r0          ; place into start register as well
-         plo     rc          ; also place 0 into sector number
-         ldi     11          ; bios function to read disk sector
-         sep     r3          ; read the sector
-         sep     r0          ; transfer control to read sector
 
 ; **** Find last available memory address
 ; **** Returns: RF - last writable address
@@ -1474,11 +1486,11 @@ f_strcmp:  lbr     strcmp
 f_ltrim:   lbr     ltrim
 f_strcpy:  lbr     strcpy
 f_memcpy:  lbr     memcpy
-f_wrtsec:  lbr     wrtsec
-f_rdsec:   lbr     rdsec
-f_seek0:   lbr     trk0
-f_seek:    lbr     seek
-f_drive:   lbr     drvsel
+f_wrtsec:  lbr     0
+f_rdsec:   lbr     0
+f_seek0:   lbr     0
+f_seek:    lbr     0
+f_drive:   lbr     0
 f_setbd:   lbr     timalc
 f_mul16:   lbr     mul16
 f_div16:   lbr     div16
@@ -1500,6 +1512,13 @@ f_uintout: lbr     uintout
 f_intout:  lbr     intout
 f_inmsg:   lbr     typeinmsg
 f_inputl:  lbr     input
+f_brktest: lbr     brktest
+f_findtkn: lbr     tokenfunc
+f_isalpha: lbr     isalpha
+f_ishex:   lbr     ishex
+f_isalnum: lbr     isalnum
+f_idnum:   lbr     idnum
+f_isterm:  lbr     isterm
 
 return:    sep     sret                ; return to caller
 
@@ -1586,4 +1605,8 @@ inpterm:   ldi     1                   ; signal <CTRL><C> exit
          lbr     call
          org     0fff1h
          lbr     ret
+
+         org     0fff9h
+version: db      0,9,4
+chsum:   db      0,0,0,0
 
