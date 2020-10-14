@@ -8,13 +8,24 @@
 
 ; #define ELF2K
 
+#define PICOELF
+
 #ifdef ELF2K
 include config.inc
 #define SERP    b3
 #define SERN    bn3
 #else
+#ifdef PICOELF
+#define SERP    bn2
+#define SERN    b2
+#define SERSEQ     req
+#define SERREQ     seq
+#else
 #define SERP    b2
 #define SERN    bn2
+#define SERSEQ     seq
+#define SERREQ     req
+#endif
 #endif
 
 data:   equ     0
@@ -24,21 +35,21 @@ sret:   equ     r5
 ; A couple of words on the baud rate constant (RE.1) usage -
 ;
 ;   If RE.1 & 0xFE != 0, then the bit banged "UART" is in use and
-; RE.1 & 0xFE determines the baud rate (it's the delay constant).
+; RE.1 & 0xFE determines the baud rate (its the delay constant).
 ; In this case the LSB of RE.1 (i.e. RE.1 & 1) is the local echo
 ; flag - if this is 1 then all input is echoed back to the terminal.
-; If it's zero, no echo is performed.
+; If its zero, no echo is performed.
 ;
-;  On the Elf2K (and currently only on the Elf2K, although there's
-; no reason why other hardware platforms couldn't use this same
+;  On the Elf2K (and currently only on the Elf2K, although theres
+; no reason why other hardware platforms couldnt use this same
 ; mechanism in the future) if RE.1 == 1 (i.e. local echo on, but
 ; the baud rate is zero) then the Elf 2000 hardware UART is used
 ; for console I/O.  Note that the UART code _always_ echos - the
-; local echo flag isn't used in that case.
+; local echo flag isnt used in that case.
 ;
 ;  On the Elf2K, if RE.1 == 0 (i.e. no local echo, baud rate 0)
 ; then the Elf 2000 80 column video card and PS/2 keyboard interface
-; are used for console I/O.  Once again there's no local echo
+; are used for console I/O.  Once again theres no local echo
 ; flag in this instance (keyboard input is always echoed to the
 ; video display).
 
@@ -50,7 +61,7 @@ sret:   equ     r5
 ; *** DF=0 uart is not installed       ***
 ; ****************************************
 uart_test: sex           r3                ; [RLA] output immediate data
-           out           2                ; [RLA] select the UART's MCR
+           out           2                ; [RLA] select the UARTs MCR
            db           14h                ; [RLA] ...
            out           3                ; [RLA] enable loopback mode, turn all
            db           10h                ; [RLA]  ... modem control bits OFF
@@ -71,7 +82,7 @@ uart_test: sex           r3                ; [RLA] output immediate data
            inp           3                ; [RLA] read the MSR
            ani           0f0h                ; [RLA] check the current modem status
            xri           0f0h                ; [RLA] all bits should be one this time
-           lbnz           no_uart        ; [RLA] no uart if they aren't
+           lbnz           no_uart        ; [RLA] no uart if they arent
            sex           r3                ; [RLA] X=P
            out           2                ; [RLA] select the MCR once more
            db           14h                ; [RLA] ...
@@ -115,14 +126,14 @@ e2k_sblp1:  SERN   e2k_setbd1          ; jump if character detectd on EF line
             sex    r2                  ; point X back to stack
             inp    3                   ; read received char to stack
 
-;   We've already initialized the UART to 9600bps and we know that the
+;   Weve already initialized the UART to 9600bps and we know that the
 ; operator is typing a carriage return charcter on the terminal connected
-; to the UART (at least he's supposed to be!).  Obviously, if his terminal
-; is set to 9600bps we'll actually receive a 0Dh character in the UART
+; to the UART (at least hes supposed to be!).  Obviously, if his terminal
+; is set to 9600bps well actually receive a 0Dh character in the UART
 ; buffer.  But even if his terminal is set to a faster or slower baud
-; rate, assuming that he's still typing carriage return, the bit pattern
+; rate, assuming that hes still typing carriage return, the bit pattern
 ; we receive is equally unique.  For example, if he transmits CR at 4800 bps
-; and we receive at 9600bps, we'll actually see 0E6h in the buffer.  So
+; and we receive at 9600bps, well actually see 0E6h in the buffer.  So
 ; by looking up whatever value we receive in a table, we can determine the
 ; correct abud rate.
         ldi        high abdtab        ; [RLA] point to the auto baud table
@@ -137,7 +148,7 @@ abdlp1:        ldn        rf                ; [RLA] get a byte from auto baud ta
         inc        rf                ; [RLA] skip the second byte
         lbr        abdlp1                ; [RLA] and keep looking
 
-;   Here if we find a match in the auto baud table.  Remember that we're
+;   Here if we find a match in the auto baud table.  Remember that were
 ; receiving at a fairly fast rate (9600bps) and if the operator was sending
 ; at a slow rate (e.g. 2400bps) then his UART is _probably still sending_
 ; right now!  To avoid having the last half of the CR show up as a garbage
@@ -189,7 +200,7 @@ e2k_setbd1: lbr    end_sb              ; use standard bit-banged serial
 ; *** Implement RE.1 for serial selection ***
 ; *******************************************
 e2k_brk:   ghi     re                  ; get baud constant
-           lbz     e2k_ptest           ; [RLA] if it's zero, test PS/2 keyboard
+           lbz     e2k_ptest           ; [RLA] if its zero, test PS/2 keyboard
            ani     0feh                ; mask out echo bit
            lbnz    f_btest             ; if non-zero, then bit-banged
            lbr     f_utest             ; otherwise use UART
@@ -207,7 +218,7 @@ e2k_tx2:   glo     re                  ; [RLA] recover the character
            lbr     vtputc              ; [RLA] and print it on the CRT
 
 e2k_rx:    ghi     re                  ; get baud constant
-           lbz     e2k_pread           ; [RLA] if it's zero, use PS/2
+           lbz     e2k_pread           ; [RLA] if its zero, use PS/2
            ani     0feh                ; mask out echo bit
            lbnz    f_bread             ; jump to bit banged code
            lbr     f_uread             ; jump to UART code
@@ -226,7 +237,7 @@ e2k_pread: bn2     $                   ; [RLA] wait for data ready flag
 ; ****************************************************
 e2k_ptest: adi     0                   ; [RLA] clear DF
            bn2     ptest1              ; [RLA] PS/2 data available is EF2
-           smi     0                   ; [RLA] it's set - set DF
+           smi     0                   ; [RLA] its set - set DF
 ptest1:    sep     sret                ; [RLA] and return
 
 ; ****************************************************
@@ -454,7 +465,7 @@ rtctest: sep     scall           ; [RLA] read RTC register 127 first
         lbz     nortc           ; [RLA] branch if the battery is dead
 
 ;   There are two versions of the NVR - a 64 byte version and a 128 byte
-; version.  The 64 byte version simply doesn't decode the upper address bit,
+; version.  The 64 byte version simply doesnt decode the upper address bit,
 ; so with this chip an attempt to access locations 64..127 simply accesses
 ; locations 0..63 instead.  We can test for a 64 byte chip by writing location
 ; 127 and checking to see if location 63 changes...
@@ -496,7 +507,7 @@ rtc64:  irx                     ; [RLA] pop the previous contents of loc 63
         smi     0               ; [RLA] and DF=1 to indicate success
         sep     sret            ; [RLA] ...
 
-; And here if the RTC doesn't exist or the battery is dead...
+; And here if the RTC doesnt exist or the battery is dead...
 nortc:  irx                     ; [RLA] pop two bytes off the stack
         irx                     ; [RLA] ...
         ldi     0               ; [RLA] return the size of the NVR
@@ -525,10 +536,10 @@ rtc_notset:ldi     1                   ; [RLA] signal bad time/date
 
 ;   There are two caveats in reading the clock - the first is that we check
 ; to ensure that 1) the clock is running and that 2) the 24 hour and binary
-; mode bits are set.  If there's been a previous call to e2k_stod then these
-; will all be true.  Note that you can't really change these bits while the
+; mode bits are set.  If theres been a previous call to e2k_stod then these
+; will all be true.  Note that you cant really change these bits while the
 ; clock is running (it can cause anomalies in the count if you do) - you have
-; to first set the mode bits and then set the time, so that's why we leave it
+; to first set the mode bits and then set the time, so thats why we leave it
 ; all up to e2k_stod().
 rtc_go: sep     scall           ; [RLA] first read register 0x0a
         dw      rtcrdi          ; [RLA] ...
@@ -547,21 +558,21 @@ rtc_go: sep     scall           ; [RLA] first read register 0x0a
 ; Remember, the RTC hardware potentially changes the seconds, minutes, hours
 ; day, month and year registers any time the clock ticks (i.e. at 23:59:59 on
 ; the last day of the year, all these bytes will change on the next tick!).
-; If the clock just happens to tick while we're in the middle of reading it,
+; If the clock just happens to tick while were in the middle of reading it,
 ; then the date/time we assemble can be off by a minute, an hour, even a year
-; if we're unlucky!  (You might think this is unlikely to happen, and I admit
+; if were unlucky!  (You might think this is unlikely to happen, and I admit
 ; that it is, but once upon a time I was personally inveolved in fixing a bug
 ; in an embedded system caused by just this situation!  It happens...)
 ; Fortunately for us, the DS1287 designers thought of this and they provide
 ; us with a bit, UIP, to signal that an update coming soon.  As long as UIP=0
-; we're guaranteed at least 244us before an update occurs.
+; were guaranteed at least 244us before an update occurs.
 rtc_w1: sep     scall           ; [RLA] UIP is in register 0x0a
         dw      rtcrdi          ; [RLA] ...
         db      80h+0ah         ; [RLA] ...
         ani     80h             ; [RLA] wait for UIP to be clear
         lbnz    rtc_w1          ; [RLA] ...
 
-; Ok, we're safe...  Read the clock...
+; Ok, were safe...  Read the clock...
         sep     scall           ; [RLA] first the month
         dw      rtcrdi          ; [RLA] ...
         db      80h+08h         ; [RLA] ...
@@ -610,16 +621,16 @@ e2k_stod:  sep     scall               ; see if RTC is present
            lbnf    rtc_err             ; jump if no RTC is present
 
 ;   The RTC ships from the factory with the clock turned off - this saves
-; the shelf life of the lithium cell.  Before setting the clock, let's turn
+; the shelf life of the lithium cell.  Before setting the clock, lets turn
 ; on the oscillator so that it will actually keep time :-)  If the oscillator
 ; is already on, this will do no harm...
         ldi     20h             ; [RLA] turn ON the clock
         sep     scall           ; [RLA] ... and OFF the SQW output
-        dw      rtcwri          ; [RLA] ... which we don't use anyway
+        dw      rtcwri          ; [RLA] ... which we dont use anyway
         db      80h+0ah         ; [RLA] ...
 
 ;   Now, set the SET bit, which inhibits the clock from counting.  This
-; prevents it from accidentally rolling over while we're in the middle of
+; prevents it from accidentally rolling over while were in the middle of
 ; updating the registers!  At the same time, select 24 hour mode, binary
 ; (not BCD) mode, and enable daylight savings time.  The latter choice is
 ; debatable since the chip only knows the DST rules for the USA, and not
@@ -658,7 +669,7 @@ e2k_stod:  sep     scall               ; see if RTC is present
         dw      rtcwri          ; [RLA] ...
         db      80h+00h         ; [RLA] ...
 
-; Clear the SET bit to allow the clock to run, and we're done!
+; Clear the SET bit to allow the clock to run, and were done!
         ldi     07h             ; [RLA] DM, 24hr and DSE
         sep     scall           ; [RLA] ...
         dw      rtcwri          ; [RLA] ...
@@ -1935,6 +1946,7 @@ resetide:  sep     scall               ; wait til drive ready
            out     3                   ; write device code
            dec     r2                  ; point back
            sex     r3                  ; setup for immediate outs
+
            out     2                   ; select interrupt port
            db      00eh
            out     3                   ; function to perform soft reset
@@ -1954,6 +1966,8 @@ resetide:  sep     scall               ; wait til drive ready
            db      7
            out     3                   ; command to set features
            db      0efh
+
+
            sex     r2                  ; point X back to stack
            sep     scall               ; wait til drive ready
            dw      waitrdy
@@ -2124,7 +2138,8 @@ delay1:    dec     re                  ; decrement counter
            bz      delay-1             ; return if zero
            br      delay1              ; otherwise keep going
 
-timalc:    glo     rb                  ; save consumed registesr
+timalc:    SERREQ
+           glo     rb                  ; save consumed registesr
            stxd
            ghi     rb
            stxd
@@ -2205,9 +2220,9 @@ type:      plo     re
            ldi     0
            shr
 sendlp:    bdf     sendnb              ; jump if no bit
-           seq                         ; set output
+           SERSEQ                      ; set output
            br      sendct
-sendnb:    req                         ; reset output
+sendnb:    SERREQ                      ; reset output
            br      sendct
 sendct:    sep     rd                  ; perform bit dela
            sex r2
@@ -2218,7 +2233,7 @@ sendct:    sep     rd                  ; perform bit dela
            dec     rf
            glo     rf
            bnz     sendlp
-           req                         ; set stop bits
+           SERREQ                      ; set stop bits
            sep     rd
            irx
            ldxa
@@ -2266,7 +2281,7 @@ recvlp1:   phi     rf
            nop
            glo     rf                  ; check for zero
            bnz     recvlp              ; loop if not
-recvdone:  req
+recvdone:  SERREQ
            sep     rd                  ; get past stop bit
            sep     rd
            ghi     rf                  ; get character
@@ -2332,7 +2347,7 @@ recvlp1:   phi     rf
            nop
            glo     rf                  ; check for zero
            bnz     recvlp              ; loop if not
-recvdone:  req
+recvdone:  SERREQ
            sep     rd                  ; get past stop bit
            sep     rd
            ghi     rf                  ; get character
@@ -2355,7 +2370,7 @@ recvlpe:   ghi     rf
            shr                         ; shift right
            SERN    recvlpe0            ; jump if zero bi
            ori     128                 ; set bit
-           req
+           SERREQ
 recvlpe1:  phi     rf
            sep     rd                  ; perform bit delay
            dec     rf                  ; decrement bit count
@@ -2364,7 +2379,7 @@ recvlpe1:  phi     rf
            glo     rf                  ; check for zero
            bnz     recvlpe             ; loop if not
            br      recvdone
-recvlpe0:  seq
+recvlpe0:  SERSEQ
            br      recvlpe1
 #endif
 
@@ -2750,12 +2765,12 @@ fmemlp:    ldn     rf        ; get byte
 ;[RLA]   For the Elf 2000, we never want to use page 07FxxH - that belongs to
 ;[RLA] the Elf 2000 monitor program.  Likewise, if the 80 column video card
 ;[RLA] is installed then we need to reserve another 2K off the top of SRAM
-;[RLA] for the frame buffer.  Sadly, there's no easy way for the BIOS to know
+;[RLA] for the frame buffer.  Sadly, theres no easy way for the BIOS to know
 ;[RLA] if the video card is installed, but we can make a pretty good guess
 ;[RLA] by checking RE.1 (the baud rate constant) - if this is zero, then the
 ;[RLA] video card is being used as the console!
            ghi     re        ; [RLA] get the baud rate constant
-           bz      fmeml1    ; [RLA] if it's zero the video card is in use
+           bz      fmeml1    ; [RLA] if its zero the video card is in use
 ;[RLA] No video card - test memory up to 07EFFH ...
            ghi     rf        ; [RLA] get the current page
            smi     07fh      ; [RLA] and stop at page 7FH
