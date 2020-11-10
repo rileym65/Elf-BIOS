@@ -8,7 +8,7 @@
 
 ; #define ELF2K
 
-#define PICOELF
+; #define PICOELF
 
 #ifdef ELF2K
 include config.inc
@@ -21,8 +21,8 @@ include config.inc
 #define SERSEQ     req
 #define SERREQ     seq
 #else
-#define SERP    b2
-#define SERN    bn2
+#define SERP    b3
+#define SERN    bn3
 #define SERSEQ     seq
 #define SERREQ     req
 #endif
@@ -2201,22 +2201,13 @@ timalc_rt: irx                         ; recover consumed registesr
            sep     sret
 
 type:      plo     re
-           glo     rf
-           stxd
-           ghi     rf
-           stxd
-           glo     rd
-           stxd
-           ghi     rd
-           stxd
+           push    rf                  ; save consumed registers
+           push    rd
            glo     re
            phi     rf
            ldi     9                   ; 9 bits to send
            plo     rf
-           ldi     high delay
-           phi     rd
-           ldi     low delay
-           plo     rd
+           mov     rd,delay            ; point RD to delay routine
            ldi     0
            shr
 sendlp:    bdf     sendnb              ; jump if no bit
@@ -2224,7 +2215,7 @@ sendlp:    bdf     sendnb              ; jump if no bit
            br      sendct
 sendnb:    SERREQ                      ; reset output
            br      sendct
-sendct:    sep     rd                  ; perform bit dela
+sendct:    sep     rd                  ; perform bit delay
            sex r2
            sex r2
            ghi     rf
@@ -2235,15 +2226,9 @@ sendct:    sep     rd                  ; perform bit dela
            bnz     sendlp
            SERREQ                      ; set stop bits
            sep     rd
-           irx
-           ldxa
-           phi     rd
-           ldxa
-           plo     rd
-           ldxa
-           phi     rf
-           ldx
-           plo     rf
+           sep     rd
+           pop     rd                  ; recover consumed registers
+           pop     rf
            sep     sret
 
 #ifdef ELF2K
@@ -2311,29 +2296,21 @@ noecho:    sep     sret                ; and return to caller
 recvlp0:   br      recvlp1             ; equalize between 0 and 1
 
 #else
-read:      glo     rf
-           stxd
-           ghi     rf
-           stxd
-           glo     rd
-           stxd
-           ghi     rd
-           stxd
-           ldi     8                   ; 8 bits to receive
+read:      push    rf                  ; save consumed registers
+           push    rd
+           ldi     9                   ; 8 bits to receive
            plo     rf
-           ldi     high delay
-           phi     rd
-           ldi     low delay
-           plo     rd
+           mov     rd,delay            ; address of bit delay routine
            ghi     re                  ; first delay is half bit size
            phi     rf
            shr
-           smi     01
+           shr
            phi     re
            SERP    $                   ; wait for transmission
            sep     rd                  ; wait half the pulse width
            ghi     rf                  ; recover baud constant
            phi     re
+           ghi     rf
            shr
            bdf     recvlpe
 recvlp:    ghi     rf
@@ -2348,21 +2325,11 @@ recvlp1:   phi     rf
            glo     rf                  ; check for zero
            bnz     recvlp              ; loop if not
 recvdone:  SERREQ
-           sep     rd                  ; get past stop bit
-           sep     rd
            ghi     rf                  ; get character
            plo     re
-           irx
-           ldxa
-           phi     rd
-           ldxa
-           plo     rd
-           ldxa
-           phi     rf
-           ldx
-           plo     rf
+           pop     rd                  ; recover consumed registers
+           pop     rf
            glo     re
-           shr
            sep     sret                ; and return to caller
 recvlp0:   br      recvlp1             ; equalize between 0 and 1
 
