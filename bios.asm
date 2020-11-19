@@ -14,18 +14,29 @@
 include config.inc
 #define SERP    b3
 #define SERN    bn3
-#else
+#define SERSEQ     seq
+#define SERREQ     req
+#endif
+
 #ifdef PICOELF
 #define SERP    bn2
 #define SERN    b2
 #define SERSEQ     req
 #define SERREQ     seq
-#else
+#endif
+
+#ifdef MC
 #define SERP    b3
 #define SERN    bn3
 #define SERSEQ     seq
 #define SERREQ     req
 #endif
+
+#ifndef SERP
+#define SERP    b2
+#define SERN    bn2
+#define SERSEQ     seq
+#define SERREQ     req
 #endif
 
 data:   equ     0
@@ -2960,6 +2971,6 @@ inpterm:   smi     0                   ; signal <CTRL><C> exit
          lbr     ret
 
          org     0fff9h
-version: db      1,0,6
+version: db      1,0,7
 chsum:   db      0,0,0,0
 
