@@ -6,103 +6,128 @@
 ; *** without express written permission from the author.         ***
 ; *******************************************************************
 
-; #define ELF2K
-
-; #define PICOELF
-
-#ifdef ELF2K
-include config.inc
-#define SERP    b3
-#define SERN    bn3
-#define SERSEQ     seq
-#define SERREQ     req
+; [RLA] Configuration for Mike Riley's PicoElf with Spare Time Gizmos' EPROM ...
+#ifdef PICOELF
+#define UART                    ; STG style UART interface
+#define  UART_SELECT    6       ;  ... UART register select I/O port
+#define  UART_DATA      7       ;  ... UART data I/O port
+#define NVR                     ; STG style NVR/RTC chip
+#define  NVR_SELECT     6       ;  ... NVR/RTC address I/O port
+#define  NVR_DATA       7       ;  ... NVR/RTC data I/O port
+#define EIDE                    ; to support an exteded IDE functions
+#define  IDE_SELECT     2       ;  ... IDE register select I/O port
+#define  IDE_DATA       3       ;  ... IDE data I/O port
+#define SERP            bn2     ; PicoElf serial input is on EF2
+#define SERN            b2      ;  ... and IS inverted ...
+#define SERSEQ          req     ;  ...
+#define SERREQ          seq     ;  ...
 #endif
 
-#ifdef PICOELF
-#define SERP    bn2
-#define SERN    b2
-#define SERSEQ     req
-#define SERREQ     seq
+; [RLA] Spare Time Gizmos Elf 2000 configuration ...
+#ifdef ELF2K
+include config.inc
+#define STGROM                  ; Spare Time Gizmos' EPROM image
+#define SERHDX                  ; console serial is half duplex
+#define UART                    ; STG style UART interface
+#define  UART_SELECT    2       ;  ... UART register select I/O port
+#define  UART_DATA      3       ;  ... UART data I/O port
+#define NVR                     ; STG style NVR/RTC chip
+#define  NVR_SELECT     2       ;  ... NVR/RTC address I/O port
+#define  NVR_DATA       3       ;  ... NVR/RTC data I/O port
+#define EIDE                    ; to support an exteded IDE functions
+#define  IDE_SELECT     2       ;  ... IDE register select I/O port
+#define  IDE_DATA       3       ;  ... IDE data I/O port
+#define SERP            b3      ; bit banged serial input on EF3
+#define SERN            bn3     ;  ... and it is NOT inverted ...
+#define SERSEQ          req     ;  ...
+#define SERREQ          seq     ;  ...
+#define KBD_DATA        7       ; PS/2 keyboard ASCII data port
+#define BKBD            b2      ; branch on keyboard data ready
+#define BNKBD           bn2     ;  ... no keyboard data ready
 #endif
 
 #ifdef MC
-#define SERP    b3
-#define SERN    bn3
-#define SERSEQ     seq
-#define SERREQ     req
+#define SERP         b3
+#define SERN        bn3
+#define SERSEQ      seq
+#define SERREQ      req
+#define  IDE_SELECT   2       ;  ... IDE register select I/O port
+#define  IDE_DATA     3       ;  ... IDE data I/O port
 #endif
 
 #ifndef SERP
-#define SERP    b2
-#define SERN    bn2
+#define SERP        b2
+#define SERN       bn2
 #define SERSEQ     seq
 #define SERREQ     req
+#define IDE_SELECT   2       ;  ... IDE register select I/O port
+#define IDE_DATA     3       ;  ... IDE data I/O port
 #endif
 
+; [RLA] Other definitions ...
 data:   equ     0
 scall:  equ     r4
 sret:   equ     r5
 
+          org     0f300h          ; [RLA] extended BIOS starts here
+
 ; A couple of words on the baud rate constant (RE.1) usage -
 ;
-;   If RE.1 & 0xFE != 0, then the bit banged "UART" is in use and
-; RE.1 & 0xFE determines the baud rate (its the delay constant).
-; In this case the LSB of RE.1 (i.e. RE.1 & 1) is the local echo
-; flag - if this is 1 then all input is echoed back to the terminal.
-; If its zero, no echo is performed.
+;   If (RE.1 & 0xFE) is not zero and is not 0xFE, then the bit banged "UART" is
+; in use and (RE.1 & 0xFE) determines the baud rate (its the delay constant).
+; In this case the LSB of RE.1 (i.e. RE.1 & 1) is the local echo flag - if this
+; is 1 then all input is echoed back to the terminal.  If it is zero, then no
+; echo is performed.
 ;
-;  On the Elf2K (and currently only on the Elf2K, although theres
-; no reason why other hardware platforms couldnt use this same
-; mechanism in the future) if RE.1 == 1 (i.e. local echo on, but
-; the baud rate is zero) then the Elf 2000 hardware UART is used
-; for console I/O.  Note that the UART code _always_ echos - the
-; local echo flag isnt used in that case.
+;   On the Elf2K and the PicoElf (and maybe other future hardware platforms) if
+; (RE.1 & 0xFE) is zero (i.e. the bit banged serial delay is zero!) then the
+; hardware UART is used for console I/O.  The UART still obeys the local echo
+; flag, so if the LSB of RE.1 is one then character input will be echoed.
 ;
-;  On the Elf2K, if RE.1 == 0 (i.e. no local echo, baud rate 0)
-; then the Elf 2000 80 column video card and PS/2 keyboard interface
-; are used for console I/O.  Once again theres no local echo
-; flag in this instance (keyboard input is always echoed to the
-; video display).
+;   On the Elf2K, and currently only on the Elf2K, if (RE.1 & 0xFE) == 0xFE
+; (i.e. the slowest possible bit banged baud ate) then the Elf 2000 80 column
+; video card and PS/2 keyboard interface are used for console I/O.  The local
+; echo flag still works in this case as well, so PS/2 keyboard input will be
+; echoed to the video card only if the LSB of RE.1 is set.
 
-#ifdef ELF2K
-           org     0f200h          ; [RLA]
+#ifdef UART
 ; ****************************************
 ; *** Test to see if uart is installed ***
 ; *** DF=1 uart is installed           ***
 ; *** DF=0 uart is not installed       ***
 ; ****************************************
-uart_test: sex           r3                ; [RLA] output immediate data
-           out           2                ; [RLA] select the UARTs MCR
-           db           14h                ; [RLA] ...
-           out           3                ; [RLA] enable loopback mode, turn all
-           db           10h                ; [RLA]  ... modem control bits OFF
-           out           2                ; [RLA] now select the modem status register
-           db           16h                ; [RLA] ...
-           sex           r2                ; [RLA] point to the stack again
-           inp           3                ; [RLA] read the MSR
-           ani           0f0h                ; [RLA] check the current modem status
-           lbnz           no_uart        ; [RLA] all bits should be zero
-           sex           r3                ; [RLA] back to X=P
-           out           2                ; [RLA] select the MCR again
-           db           14h                ; [RLA] ...
-           out           3                ; [RLA] enable loopback mode, turn all
-           db           1fh                ; [RLA]  ... modem control bits ON
-           out           2                ; [RLA] select the MSR
-           db           16h                ; [RLA] ...
-           sex           r2                ; [RLA] ...
-           inp           3                ; [RLA] read the MSR
-           ani           0f0h                ; [RLA] check the current modem status
-           xri           0f0h                ; [RLA] all bits should be one this time
-           lbnz           no_uart        ; [RLA] no uart if they arent
-           sex           r3                ; [RLA] X=P
-           out           2                ; [RLA] select the MCR once more
-           db           14h                ; [RLA] ...
-           out           3                ; [RLA] disable loopback mode, set DTR & RTS
-           db           03h                ; [RLA] ...
-yes_uart:  smi     0                   ; signal uart is present
-           sep     sret                ; and return
-no_uart:   adi     0                   ; signal no uart installed
-           sep     sret                ; and return
+uart_test: sex     r3               ; [RLA] output immediate data
+           out     UART_SELECT      ; [RLA] select the UARTs MCR
+           db      14h              ; [RLA] ...
+           out     UART_DATA        ; [RLA] enable loopback mode, turn all
+           db      10h              ; [RLA]  ... modem control bits OFF
+           out     UART_SELECT      ; [RLA] now select the modem status register
+           db      16h              ; [RLA] ...
+           sex     r2               ; [RLA] point to the stack again
+           inp     UART_DATA        ; [RLA] read the MSR
+           ani     0f0h             ; [RLA] check the current modem status
+           lbnz    no_uart          ; [RLA] all bits should be zero
+           sex     r3               ; [RLA] back to X=P
+           out     UART_SELECT      ; [RLA] select the MCR again
+           db      14h              ; [RLA] ...
+           out     UART_DATA        ; [RLA] enable loopback mode, turn all
+           db      1fh              ; [RLA]  ... modem control bits ON
+           out     UART_SELECT      ; [RLA] select the MSR
+           db      16h              ; [RLA] ...
+           sex     r2               ; [RLA] ...
+           inp     UART_DATA        ; [RLA] read the MSR
+           ani     0f0h             ; [RLA] check the current modem status
+           xri     0f0h             ; [RLA] all bits should be one this time
+           lbnz    no_uart          ; [RLA] no uart if they arent
+           sex     r3               ; [RLA] X=P
+           out     UART_SELECT      ; [RLA] select the MCR once more
+           db      14h              ; [RLA] ...
+           out     UART_DATA        ; [RLA] disable loopback mode, set DTR & RTS
+           db      03h              ; [RLA] ...
+yes_uart:  smi     0                ; signal uart is present
+           sep     sret             ; and return
+no_uart:   adi     0                ; signal no uart installed
+           sep     sret             ; and return
 
 
 ; ***************************************************
@@ -118,46 +143,46 @@ e2k_timalc: sep    scall               ; see if uart is present
             ldi    34h                 ; set 9600 N81
             sep    scall               ; set deafult baud rate
             dw     e2k_stbd
-e2k_sblp2:  sex    r3                       ; [RLA] address the data register
-            out           2                       ; [RLA] ...
-            db           10h                       ; [RLA] ...
-            sex    r2                       ; [RLA] ...
-            inp           3                       ; [RLA] read RBR to clear DR bit
+e2k_sblp2:  sex    r3                  ; [RLA] address the data register
+            out    UART_SELECT         ; [RLA] ...
+            db     10h                 ; [RLA] ...
+            sex    r2                  ; [RLA] ...
+            inp    UART_DATA           ; [RLA] read RBR to clear DR bit
             sex    r3                  ; need to set uart register to line stat
-            out    2
+            out    UART_SELECT
             db     015h
             sex    r2                  ; point X back to stack
 e2k_sblp1:  SERN   e2k_setbd1          ; jump if character detectd on EF line
-            inp    3                   ; read modem status
+            inp    UART_DATA           ; read modem status
             shr                        ; shift DR bit into carry
             lbnf   e2k_sblp1           ; loop if no character detected on uart
             sex    r3                  ; setup for immediate out
-            out    2                   ; select uart data register
+            out    UART_SELECT         ; select uart data register
             db     010h
             sex    r2                  ; point X back to stack
-            inp    3                   ; read received char to stack
+            inp    UART_DATA           ; read received char to stack
 
-;   Weve already initialized the UART to 9600bps and we know that the
-; operator is typing a carriage return charcter on the terminal connected
-; to the UART (at least hes supposed to be!).  Obviously, if his terminal
-; is set to 9600bps well actually receive a 0Dh character in the UART
+;   We have already initialized the UART to 9600bps and we know that the
+; operator is typing a carriage return character on the terminal connected
+; to the UART (at least he is supposed to be!).  Obviously, if his terminal
+; is set to 9600bps we will actually receive a 0Dh character in the UART
 ; buffer.  But even if his terminal is set to a faster or slower baud
-; rate, assuming that hes still typing carriage return, the bit pattern
+; rate, assuming that he is still typing carriage return, the bit pattern
 ; we receive is equally unique.  For example, if he transmits CR at 4800 bps
 ; and we receive at 9600bps, well actually see 0E6h in the buffer.  So
 ; by looking up whatever value we receive in a table, we can determine the
 ; correct abud rate.
-        ldi        high abdtab        ; [RLA] point to the auto baud table
+        ldi        high abdtab       ; [RLA] point to the auto baud table
         phi        rf                ; [RLA] ...
         ldi        low abdtab        ; [RLA] ...
         plo        rf                ; [RLA] ...
-abdlp1:        ldn        rf                ; [RLA] get a byte from auto baud table
+abdlp1: ldn        rf                ; [RLA] get a byte from auto baud table
         lbz        e2k_timalc        ; [RLA] start over if end of table
         inc        rf                ; [RLA] ...
-        xor                        ; [RLA] compare it to byte on the stack
-        lbz        abd2                ; [RLA] branch if we found a match
+        xor                          ; [RLA] compare it to byte on the stack
+        lbz        abd2              ; [RLA] branch if we found a match
         inc        rf                ; [RLA] skip the second byte
-        lbr        abdlp1                ; [RLA] and keep looking
+        lbr        abdlp1            ; [RLA] and keep looking
 
 ;   Here if we find a match in the auto baud table.  Remember that were
 ; receiving at a fairly fast rate (9600bps) and if the operator was sending
@@ -167,89 +192,119 @@ abdlp1:        ldn        rf                ; [RLA] get a byte from auto baud ta
 ; worst case.   BTW, at 4MHz, each clock is 500ns and each machine cycle
 ; is 4us.  At 1200 baud, 10 bits takes about 8ms to transmit, so a delay
 ; of about 8ms/4us = 2000 cycles is about enough.
-abd2:        ldi        0                ; [RLA] clear the delay counter
-abd2a:        nop                        ; [RLA] 3 cycles
-        nop                        ; [RLA] 3 cycles
-        smi        1                ; [RLA] 2 cycles
-        bnz        abd2a                ; [RLA] 2 cycles
-                                ; [RLA] 10 cycles * 256 = 2560 cycles...
+abd2:   ldi        0                 ; [RLA] clear the delay counter
+abd2a:  nop                          ; [RLA] 3 cycles
+        nop                          ; [RLA] 3 cycles
+        smi        1                 ; [RLA] 2 cycles
+        bnz        abd2a             ; [RLA] 2 cycles
+                                     ; [RLA] 10 cycles * 256 = 2560 cycles...
 
 ;   The UART data register is still selected - read the RBR to remove any
 ; garbage character that might be there...
-        inp        3                ; [RLA] read the data register first
+        inp        UART_DATA         ; [RLA] read the data register first
         sex        r3                ; [RLA] ...
-        out     2                ; [RLA]  ... address the LSR
-        db        015h                ; [RLA]  ...
+        out        UART_SELECT       ; [RLA]  ... address the LSR
+        db         015h              ; [RLA]  ...
         sex        r2                ; [RLA]         ...
-        inp        3                ; [RLA]        and clear the error flags too
+        inp        UART_DATA         ; [RLA]        and clear the error flags too
 
 ; [RLA] All done - return re.1 ==1 and rf.0 == baud rate...
-        ldi        1                ; [MHR] turn echoing on by default
+        ldi        1                 ; [MHR] turn echoing on by default
         phi        re                ; [RLA] ...
         ldn        rf                ; [RLA] get the UART mode byte
         plo        rf                ; [RLA] return it in rf
-        sep     scall           ; [RLA] change the UART mode
-        dw      e2k_stbd        ; [RLA] ...
-        lbr        timalc_rt       ; [RLA] and return
+        sep        scall             ; [RLA] change the UART mode
+        dw         e2k_stbd          ; [RLA] ...
+        lbr        timalc_rt         ; [RLA] and return
 
 ; Table of autoboad results and baud rates...
-abdtab:        dw        00d34h                ; [RLA]  9,600bps
-        dw        0f235h                ; [RLA] 19,200bps
-        dw        0f935h                ; [RLA] 19,200bps
-        dw        0e633h                ; [RLA]  4,800bps
-        dw        07832h                ; [RLA]  2,400bps
-;        dw        08031h                ; [RLA]  1,200bps (unreliable!)
-        db        0                ; [RLA] end of table
+abdtab: dw        00d34h             ; [RLA]  9,600bps
+        dw        0f235h             ; [RLA] 19,200bps
+        dw        0f935h             ; [RLA] 19,200bps
+        dw        0e633h             ; [RLA]  4,800bps
+        dw        07832h             ; [RLA]  2,400bps
+;       dw        08031h             ; [RLA]  1,200bps (unreliable!)
+        db        0                  ; [RLA] end of table
 
 ; Here if we detect activity on the bit banged port...
-e2k_setbd1: lbr    end_sb              ; use standard bit-banged serial
-
-
+e2k_setbd1: lbr    end_sb            ; use standard bit-banged serial
 
 
 ; *******************************************
 ; *** Implement RE.1 for serial selection ***
 ; *******************************************
-e2k_brk:   ghi     re                  ; get baud constant
-           lbz     e2k_ptest           ; [RLA] if its zero, test PS/2 keyboard
-           ani     0feh                ; mask out echo bit
-           lbnz    f_btest             ; if non-zero, then bit-banged
-           lbr     f_utest             ; otherwise use UART
+e2k_brk: ghi      re                 ; get baud constant
+         ani      0feh               ; [RLA] mask out echo bit
+         lbz      f_utest            ; [RLA] branch if the UART is in use
+#ifdef VIDEO
+         xri      0feh               ; [RLA] is the ELF2K video card active?
+         lbz      e2k_ptest          ; [RLA] yes, test PS/2 keyboard
+#endif
+         lbr      f_btest            ; [RLA] otherwise use the bit banged serial
 
-e2k_tx:    plo     re                  ; save character
-           ghi     re                  ; get baud constant
-           lbz     e2k_tx2             ; [RLA] use video if zero
-           ani     0feh                ; mask out echo bit
-           lbz     e2k_tx1             ; jump if UART
-           glo     re                  ; recover character
-           lbr     f_btype             ; jump to bit-banged code
-e2k_tx1:   glo     re                  ; recover character
-           lbr     f_utype             ; jump to UART routine
-e2k_tx2:   glo     re                  ; [RLA] recover the character
-           lbr     vtputc              ; [RLA] and print it on the CRT
 
-e2k_rx:    ghi     re                  ; get baud constant
-           lbz     e2k_pread           ; [RLA] if its zero, use PS/2
-           ani     0feh                ; mask out echo bit
-           lbnz    f_bread             ; jump to bit banged code
-           lbr     f_uread             ; jump to UART code
+
+; [RLA] Generic transmit routine ...
+; [RLA]    This will send the character to the UART, video card or
+; [RLA] the plain old bit banged serial port, depending on which
+; [RLA] was detected ...
+e2k_tx: plo     re              ; save character
+        ghi     re              ; get baud constant
+        ani     0feh            ; [RLA] mask out echo bit
+        lbz     e2k_tx1         ; [RLA] jump if UART
+#ifdef VIDEO
+        xri     0feh            ; [RLA] is the Elf2K video card active?
+        lbz     e2k_tx2         ; [RLA] yes - use 80 column video card
+#endif
+        glo     re              ; recover character
+        lbr     f_btype         ; jump to bit-banged code
+e2k_tx1:glo     re              ; recover character
+        lbr     f_utype         ; jump to UART routine
+#ifdef VIDEO
+e2k_tx2:glo     re              ; [RLA] recover the character
+        lbr     vtputc          ; [RLA] and print it on the CRT
+#endif
+
+
+; [RLA] Generic receive routine ...
+; [RLA]    Receive a character from the UART, PS/2 keyboard or bit
+; [RLA] banged serial depending on which is installed...
+e2k_rx: ghi     re              ; get baud constant
+        ani     0feh            ; [RLA] mask out echo bit
+        lbz     f_uread         ; [RLA] use the UART if it is zero
+#ifdef VIDEO
+        xri     0feh            ; [RLA] is the Elf2K PS/2 keyboard active?
+        lbz     e2k_pread       ; [RLA] if its zero, use PS/2
+#endif
+        lbr     f_bread         ; jump to bit banged code
+
 
 ; *********************************************
 ; *** Read byte from Elf 2000 PS/2 Keyboard ***
 ; *** Returns: D - byte read                ***
 ; *********************************************
-e2k_pread: bn2     $                   ; [RLA] wait for data ready flag
-           inp     7                   ; [RLA] read the PS/2 data port
-           lbr     vtputc              ; [RLA] echo it and return
+#ifdef VIDEO
+e2k_pread:
+        BNKBD   $               ; [RLA] wait for data ready flag
+        inp     KBD_DATA        ; [RLA] read the PS/2 data port
+        plo     re              ; [RLA] save the character for a minute
+        ghi     re              ; [RLA] get the baud rate constant
+        shr                     ; [RLA] shift the echo bit into DF
+        glo     re              ; [RLA] restore the data read
+        lbdf    vtputc          ; [RLA] echo it and return
+        sep     sret            ; [RLA] no echo - just return
 
 ; ****************************************************
 ; *** Test to see if character available from PS/2 ***
 ; *** Returns: DF=1 - character available          ***
 ; ****************************************************
-e2k_ptest: adi     0                   ; [RLA] clear DF
-           bn2     ptest1              ; [RLA] PS/2 data available is EF2
-           smi     0                   ; [RLA] its set - set DF
-ptest1:    sep     sret                ; [RLA] and return
+e2k_ptest:
+        adi     0               ; [RLA] clear DF
+        BNKBD   ptest1          ; [RLA] PS/2 data available is EF2
+        smi     0               ; [RLA] its set - set DF
+ptest1: sep     sret            ; [RLA] and return
+#endif
+
 
 ; ****************************************************
 ; *** Test to see if character available from UART ***
@@ -257,9 +312,9 @@ ptest1:    sep     sret                ; [RLA] and return
 ; ****************************************************
 e2k_utest: ldi     015h                ; need UART line status register
            str     r2                  ; prepare for out
-           out     2                   ; write to register select port
+           out     UART_SELECT         ; write to register select port
            dec     r2                  ; back to a free spot
-           inp     3                   ; read line status register
+           inp     UART_DATA           ; read line status register
            shr                         ; shift data ready bit into DF
            sep     sret                ; and return
 
@@ -267,32 +322,33 @@ e2k_utest: ldi     015h                ; need UART line status register
 ; *** Read byte from Elf 2000 UART ***
 ; *** Returns: D - byte read       ***
 ; ************************************
-e2k_uread: ldi     015h                ; need UART line status register
-           str     r2                  ; prepare for out
-           out     2                   ; write to register select port
-           dec     r2                  ; correct for inc on out
-uread_lp:  inp     3                   ; read line status register
-           ani     1                   ; mask for data ready bit
-           lbz     uread_lp            ; loop back if no bytes to read
-           ldi     010h                ; select data register
-           str     r2                  ; prepare for out
-           out     2                   ; write to register select port
-           dec     r2                  ; back to free spot
-           inp     3                   ; read UART data register
-           plo     re                  ; save for a moment
-;[RLA] The Elf 2000 UART _always_ echos!!
-;[RLA]     ghi     re                  ; need to check for echo
-;[RLA]     shr                         ; shift echo flag into DF
-;[RLA]     glo     re                  ; recover read byte
-;[RLA]     lbdf    e2k_utype           ; jump if need echo
-;[RLA]     sep     sret                ; otherwise return
+e2k_uread:
+        ldi     015h            ; need UART line status register
+        str     r2              ; prepare for out
+        out     UART_SELECT     ; write to register select port
+        dec     r2              ; correct for inc on out
+uread_lp:
+        inp     UART_DATA       ; read line status register
+        ani     1               ; mask for data ready bit
+        lbz     uread_lp        ; loop back if no bytes to read
+        ldi     010h            ; select data register
+        str     r2              ; prepare for out
+        out     UART_SELECT     ; write to register select port
+        dec     r2              ; back to free spot
+        inp     UART_DATA       ; read UART data register
+        plo     re              ; save for a moment
+        ghi     re              ; need to check for echo
+        shr                     ; shift echo flag into DF
+        glo     re              ; recover read byte
+        lbdf    e2k_utype       ; jump if need echo
+        sep     sret            ; otherwise return
 
 ;[MHR]     lbz     e2k_uread           ; [RLA] ignore nulls
 ;[RLA]     xri     $ff                 ; [RLA] and ignore $FF bytes
 ;[RLA]     lbz     e2k_uread           ; [RLA] ....
 ;[RLA]     xri     $ff                 ; [RLA] ...
 ;[RLA]     sep     sret                ; return byte to caller
-;[RLA] Fall into utype to echo the character we jsut read...
+;[RLA] Fall into utype to echo the character we just read...
 
 
 ; ***********************************
@@ -302,16 +358,16 @@ uread_lp:  inp     3                   ; read line status register
 e2k_utype: stxd                        ; save byte to send onto stack
            ldi     015h                ; need line status register of UART
            str     r2                  ; write to stack
-           out     2                   ; select UART port
+           out     UART_SELECT         ; select UART port
            dec     r2                  ; keep stack at empty spot
-utype_lp:  inp     3                   ; read status port
+utype_lp:  inp     UART_DATA           ; read status port
            ani     020h                ; mask for holding register empty
            lbz     utype_lp            ; loop until allowd to send character
            ldi     010h                ; select data register
            str     r2                  ; prepare for out
-           out     2                   ; select UART register
+           out     UART_SELECT         ; select UART register
            ldx                               ; [RLA] reload the original byte
-           out     3                   ; write byte to UART
+           out     UART_DATA           ; write byte to UART
            dec     r2                  ; correct for inc on OUT
            sep     sret                ; and return to caller
 
@@ -341,22 +397,21 @@ utype_lp:  inp     3                   ; read status port
 ; *****************************************
 e2k_stbd:  plo     re                  ; save a coyp of parameters
            sex     r3                  ; setup line control register of UART
-           out     2
+           out     UART_SELECT
            db      013h
            sex     r2                  ; set x back to stack
-;[RLA]           xri     0ffh                ; check for existance of UART
-;[RLA]           lbz     no_uart             ; jump if not installed
-;[RLA]           xri     0ffh                ; reset value
+;[RLA]     xri     0ffh                ; check for existance of UART
+;[RLA]     lbz     no_uart             ; jump if not installed
+;[RLA]     xri     0ffh                ; reset value
            ldi     080h                ; [RLA] set DLAB bit
            str     r2                  ; store for write
-           out     3                   ; write line control register
+           out     UART_DATA           ; write line control register
            dec     r2                  ; compensate for out
-
-;[RLA]           dec     r2                  ; need some workspace
-           glo           rf                       ; [RLA] save consumed register
-           stxd                               ; [RLA]
-           ghi           rf                       ; [RLA]
-           stxd                               ; [RLA]
+;[RLA]     dec     r2                  ; need some workspace
+           glo     rf                  ; [RLA] save consumed register
+           stxd                        ; [RLA]
+           ghi     rf                  ; [RLA]
+           stxd                        ; [RLA]
            glo     re                  ; get com parameters
            ani     7                   ; strip all but baud rate bits
            shl                         ; multiply by 2
@@ -365,27 +420,25 @@ e2k_stbd:  plo     re                  ; save a coyp of parameters
            add                         ; add in offset
            plo     rf                  ; place into rf
            ldi     high baudtab        ; high portion of address
-           adci     0                  ; [RLA] propagate carry
+           adci    0                   ; [RLA] propagate carry
            phi     rf
-
            sex     r3                  ; setup for output
-           out     2                   ; select msb of diviser latch
+           out     UART_SELECT         ; select msb of diviser latch
            db      011h
            sex     rf                  ; point to diviser value
-           out     3                   ; [RLA] and write to latch
+           out     UART_DATA           ; [RLA] and write to latch
            sex     r3                  ; setup for next register select
-           out     2                   ; select lsb of diviser latch
+           out     UART_SELECT         ; select lsb of diviser latch
            db      010h
            sex     rf                  ; set x to diviser table
-           out     3                   ; and write to uart
+           out     UART_DATA           ; and write to uart
            sex     r2                  ; set x back to stack
-;[RLA]           inc     r2                  ; point back to line control value
-           irx                               ; [RLA] restore rf
-           ldxa                               ; [RLA]
-           phi     rf                       ; [RLA] 
-           ldx                               ; [RLA]
-           plo     rf                       ; [RLA]
-
+;[RLA]     inc     r2                  ; point back to line control value
+           irx                         ; [RLA] restore rf
+           ldxa                        ; [RLA]
+           phi     rf                  ; [RLA] 
+           ldx                         ; [RLA]
+           plo     rf                  ; [RLA]
            glo     re                  ; recover comm parameters
            shr                         ; shift out baud value
            shr
@@ -394,30 +447,32 @@ e2k_stbd:  plo     re                  ; save a coyp of parameters
            ani     0fh                 ; [RLA] clear unneded bits
            str     r2                  ; prepare for out
            sex     r3                  ; need to write register select
-           out     2                   ; select line control register
+           out     UART_SELECT         ; select line control register
            db      013h
            sex     r2                  ; X back to stack
-           out     3                   ; write new line control register
+           out     UART_DATA           ; write new line control register
            dec     r2                  ; compensate for out
-           sex           r3                       ; [RLA] X=P (again!)
-           out           2                       ; [RLA] address modem control register
-           db           014h                       ; [RLA] ...
-           out           3                       ; [RLA] clear loopback, set DTR & RTS
-           db           03h                       ; [RLA] ...
-           sex           r2                       ; [RLA] back to the stack again
+           sex     r3                  ; [RLA] X=P (again!)
+           out     UART_SELECT         ; [RLA] address modem control register
+           db      014h                ; [RLA] ...
+           out     UART_DATA           ; [RLA] clear loopback, set DTR & RTS
+           db      03h                 ; [RLA] ...
+           sex     r2                  ; [RLA] back to the stack again
            adi     0                   ; signal success
            sep     sret                ; return to caller
 baudtab:   dw      512,128,64,32,16,8,4
+#endif  ;; "#ifdef UART" ...
 
+#ifdef NVR
 ; *********************************
 ;   Read a byte from an RTC/NVR register.  The address of the register
 ; is passed inline, after the CALL RTCRDI, and the contents of the RTC/NVR
 ; register is returned in D...
 ; *********************************
 rtcrdi: sex     r6              ; [RLA] point to the inline arguments
-        out     2               ; [RLA] select the disk/uart/rtc register
+        out     NVR_SELECT      ; [RLA] select the disk/uart/rtc register
         sex     r2              ; [RLA] back to the regular stack
-        inp     3               ; [RLA] and read the RTC register 
+        inp     NVR_DATA        ; [RLA] and read the RTC register 
         sep     sret            ; [RLA] return the register value in D
 
 ; *********************************
@@ -426,10 +481,10 @@ rtcrdi: sex     r6              ; [RLA] point to the inline arguments
 ; in the D register...
 ; *********************************
 rtcwri: sex     r6              ; [RLA] address the inline arguments
-        out     2               ; [RLA] output the register select and skip it
+        out     NVR_SELECT      ; [RLA] output the register select and skip it
         sex     r2              ; [RLA] back to the regular stack now
         str     r2              ; [RLA] temporarily store the value to output
-        out     3               ; [RLA] and write it to the RTC/NVR 
+        out     NVR_DATA        ; [RLA] and write it to the RTC/NVR 
         dec     r2              ; [RLA] out increments R(X), so fix that
         sep     sret            ; [RLA] and return
 
@@ -445,17 +500,17 @@ rtcwri: sex     r6              ; [RLA] address the inline arguments
 ; [RLA] length (less checksum) that can be passed to rdnvr/wrnvr...
 ; *********************************
 rtctest: sep     scall           ; [RLA] read RTC register 127 first
-        dw      rtcrdi          ; [RLA] ...
-        db      80h+127         ; [RLA] ...
-        stxd                    ; [RLA] save RTC loc 127 on the stack
-        sep     scall           ; [RLA] now save RTC register 63
-        dw      rtcrdi          ; [RLA] ... same as before
-        db      80h+63          ; [RLA] ...
-        stxd                    ; [RLA] push RTC loc 63 too
+         dw      rtcrdi          ; [RLA] ...
+         db      80h+127         ; [RLA] ...
+         stxd                    ; [RLA] save RTC loc 127 on the stack
+         sep     scall           ; [RLA] now save RTC register 63
+         dw      rtcrdi          ; [RLA] ... same as before
+         db      80h+63          ; [RLA] ...
+         stxd                    ; [RLA] push RTC loc 63 too
 
 ;   First test to see whether the RTC/NVR exists at all by trying to write
 ; (and successfully read back!) location 63...
-        xri     0ffh            ; [RLA] complement previoys data in loc 63
+        xri     0ffh            ; [RLA] complement previous data in loc 63
         sep     scall           ; [RLA] write it back
         dw      rtcwri          ; [RLA] ...
         db      80h+63          ; [RLA] ... to location 63
@@ -476,7 +531,7 @@ rtctest: sep     scall           ; [RLA] read RTC register 127 first
         lbz     nortc           ; [RLA] branch if the battery is dead
 
 ;   There are two versions of the NVR - a 64 byte version and a 128 byte
-; version.  The 64 byte version simply doesnt decode the upper address bit,
+; version.  The 64 byte version simply doesn't decode the upper address bit,
 ; so with this chip an attempt to access locations 64..127 simply accesses
 ; locations 0..63 instead.  We can test for a 64 byte chip by writing location
 ; 127 and checking to see if location 63 changes...
@@ -494,18 +549,20 @@ rtctest: sep     scall           ; [RLA] read RTC register 127 first
         lbnz    rtc64           ; [RLA] branch if 64 byte chip
 
 ; Here for the 128 byte RTC/NVR with a good battery!
-        irx                     ; [RLA] pop the previous contents of loc 63
-        ldxa                    ; [RLA] ...
+rtc128: irx                     ; [RLA] pop the previous contents of loc 63
+        ldx                     ; [RLA] ...
         sep     scall           ; [RLA] and write it back
         dw      rtcwri          ; [RLA] ...
         db      80h+63          ; [RLA] ...
-        ldx                     ; [RLA] now pop location 127
+        irx                     ; [RLA] now pop location 127
+        ldx                     ; [RLA] ...
         sep     scall           ; [RLA] and write that back too
         dw      rtcwri          ; [RLA] ...
         db      80h+127         ; [RLA] ...
         ldi     128-14          ; [RLA] return the size of the NVR
         smi     0               ; [RLA] and DF=1 to indicate success
         sep     sret            ; [RLA] ...
+
 
 ; Here for the 64 byte RTC/NVR....
 rtc64:  irx                     ; [RLA] pop the previous contents of loc 63
@@ -525,6 +582,7 @@ nortc:  irx                     ; [RLA] pop two bytes off the stack
         adi     0               ; [RLA] and DF=0 to indicate failure
         sep     sret            ; [RLA] ..
 
+
 ; ******************************** 
 ; *** Read RTC date            ***
 ; *** RF - buffer for time     ***
@@ -533,17 +591,17 @@ nortc:  irx                     ; [RLA] pop two bytes off the stack
 ; ***             D=0 no RTC   ***
 ; ***             D=1 bad time ***
 ; ********************************
-e2k_gtod:  sep     scall               ; see if RTC is present
-           dw      rtctest
-           lbdf    rtc_go              ; jump if RTC was found
+e2k_gtod:   sep     scall               ; see if RTC is present
+            dw      rtctest
+            lbdf    rtc_go              ; jump if RTC was found
 ; Here if there is no RTC installed...
-rtc_err:   smi     0                   ; signal error
-           ldi     0                   ; as no RTC
-           sep     sret                ; return
+rtc_err:    smi     0                   ; signal error
+            ldi     0                   ; as no RTC
+            sep     sret                ; return
 ; And here if the RTC is not set...
-rtc_notset:ldi     1                   ; [RLA] signal bad time/date
-           smi     0                   ; [RLA] signal error 
-           sep     sret                ; [RLA] return
+rtc_notset: ldi     1                   ; [RLA] signal bad time/date
+            smi     0                   ; [RLA] signal error 
+            sep     sret                ; [RLA] return
 
 ;   There are two caveats in reading the clock - the first is that we check
 ; to ensure that 1) the clock is running and that 2) the 24 hour and binary
@@ -699,7 +757,7 @@ e2k_stod:  sep     scall               ; see if RTC is present
 ; ************************************************
 e2k_rdnvr: sep     scall               ; check for presence of NVR
            dw      rtctest
-           lbnf    rtc_err             ; jujp if not
+           lbnf    rtc_err             ; jump if not
            glo     rf                  ; save RF
            stxd
            ghi     rf
@@ -735,10 +793,10 @@ e2k_rdnvr: sep     scall               ; check for presence of NVR
            str     r2                  ; store into memory
 rdnvr_lp:  glo     rc                  ; see if done
            lbz     rdnvr_dn            ; jump if so
-           out     2                   ; write next register address
+           out     NVR_SELECT          ; write next register address
            dec     r2                  ; compensate for inc on out
            sex     rd                  ; set x to destination memory
-           inp     3                   ; read NVR
+           inp     NVR_DATA            ; read NVR
            inc     rd                  ; increment destination
            dec     rc                  ; decrement count
            sex     r2                  ; point x back to stack
@@ -771,16 +829,16 @@ chk_err:   irx                         ; recover RD and RF
 ; ************************************************
 e2k_wrnvr: sep     scall               ; check for presence of NVR
            dw      rtctest
-           lbnf    rtc_err             ; jujp if not
+           lbnf    rtc_err             ; jump if not
            glo     rf                  ; get starting register
            adi     08eh                ; offset to beginning of general regs.
            str     r2                  ; store into memory
 wrnvr_lp:  glo     rc                  ; see if done
            lbz     wrnvr_dn            ; jump if so
-           out     2                   ; write next register address
+           out     NVR_SELECT          ; write next register address
            dec     r2                  ; compensate for inc on out
            sex     rd                  ; set x to source memory
-           out     3                   ; write NVR
+           out     NVR_DATA            ; write NVR
            dec     rc                  ; decrement count
            sex     r2                  ; point x back to stack
            ldi     1                   ; [RLA] increment the register address
@@ -813,10 +871,10 @@ nvr_chk:   ldi     0                   ; set initial checksum
 nvr_chklp: ldx                         ; [RLA] duplicate the byte on the TOS
            dec     r2                  ; [RLA] ...
            str     r2                  ; [RLA] ...
-           out     2                   ; select NVR address
+           out     NVR_SELECT          ; select NVR address
 ;[RLA]     dec     r2                  ; [RLA] correct for out increment
            dec     r2                  ; [RLA] and then point to a free byte
-           inp     3                   ; [RLA] read NVR byte
+           inp     NVR_DATA            ; [RLA] read NVR byte
            glo     rf                  ; add into checksum
            add
            plo     rf
@@ -853,20 +911,20 @@ set_chk:   glo     rc                  ; save consumed register
            adi     8eh-2               ; [RLA]
            plo     rc
            str     r2                  ; store for out
-           out     2                   ; write register selection port
+           out     NVR_SELECT          ; write register selection port
            dec     r2                  ; compensate for increment
            ghi     rf                  ; get high of checksum
            str     r2                  ; prepare for out
-           out     3                   ; write to NVRAM
+           out     NVR_DATA            ; write to NVRAM
            dec     r2                  ; [RLA] compensate for out
            inc     rc                  ; next position
            glo     rc                  ; setup address
            str     r2                  ; store for out
-           out     2                   ; write register selection port
+           out     NVR_SELECT          ; write register selection port
            dec     r2                  ; compensate for increment
            glo     rf                  ; get low of checksum
            str     r2                  ; prepare for out
-           out     3                   ; write to NVRAM
+           out     NVR_DATA            ; write to NVRAM
            ldx
            plo     rc
            sep     sret                ; and return
@@ -882,22 +940,223 @@ get_chk:   glo     rc                  ; save consumed register
            adi     8eh-2                 ; [RLA] setup address
            plo     rc    
            str     r2                  ; store for out
-           out     2                   ; compensate for inc
+           out     NVR_SELECT          ; compensate for inc
            dec     r2                  ; [RLA] correct for out instruction
-           inp     3                   ; read NVR 
+           inp     NVR_DATA            ; read NVR 
            phi     rd                  ; put into RD.1
            inc     rc                  ; move to next address
            glo     rc                  ; get checksum address
            str     r2                  ; store for out
-           out     2                   ; compensate for inc
+           out     NVR_SELECT          ; compensate for inc
            dec     r2                  ; [RLA] correct for out instruction
-           inp     3                   ; read NVR 
+           inp     NVR_DATA            ; read NVR 
            plo     rd                  ; put into RD.0
            irx                         ; recover consumed register
            ldx     
            plo     rc
            sep     sret                ; return to caller
 
+; ****************************************************
+; *** Output 2 digit decimal number with leading 0 ***
+; *** D - value to output                          ***
+; *** RF - buffer to write value to                ***
+; ****************************************************
+intout2:
+        str     r2              ; save value for a moment
+        ldi     0               ; setup count
+        plo     re
+        ldn     r2              ; retrieve it
+intout2lp:
+        smi     10              ; subtract 10
+        lbnf    intout2go       ; jump if too small
+        inc     re              ; increment tens
+        lbr     intout2lp       ; and keep looking
+intout2go:
+        adi     10              ; make positive again
+        str     r2              ; save units
+        glo     re              ; get tens
+        adi     '0'             ; convert to ascii
+        str     rf              ; store into buffer
+        inc     rf
+        ldn     r2              ; recover units
+        adi     '0'             ; convert to ascii
+        str     rf              ; and store into buffer
+        inc     rf
+        sep     sret            ; return to caller
+
+; ************************************
+; *** Convert packed date to ascii ***
+; *** RD - pointer to packed date  ***
+; *** RF - pointer to buffer       ***
+; ************************************
+dttoas: lda     rd              ; retrieve month
+        sep     scall           ; output it
+        dw      intout2
+        ldi     '/'             ; now a slash
+        str     rf              ; store into buffer
+        inc     rf
+        lda     rd              ; retrieve day
+        sep     scall           ; output it
+        dw      intout2
+        ldi     '/'             ; now a slash
+        str     rf              ; store into buffer
+        inc     rf
+        lda     rd              ; [RLA] get year
+        stxd                    ; save contents of RD
+        adi     180             ; add base of 1972
+        plo     rd
+        ghi     rd              ; save high byte
+        stxd
+        ldi     7               ; high byte of 1972
+        adci    0               ; propagate the carry
+        phi     rd
+        sep     scall           ; output the year
+        dw      f_uintout
+        ldi     0               ; write terminator
+        str     rf
+        irx                     ; recover rd
+        ldxa
+        phi     rd
+        ldx
+        plo     rd
+        sep     sret            ; and return
+
+; ************************************
+; *** Convert packed time to ascii ***
+; *** RD - pointer to packed time  ***
+; *** RF - pointer to buffer       ***
+; ************************************
+tmtoas: ldi     ' '             ; space after year
+        str     rf              ; store into buffer
+        inc     rf
+        lda     rd              ; get hour
+        sep     scall           ; output it
+        dw      intout2
+        ldi     ':'             ; now a colon
+        str     rf              ; store into buffer
+        inc     rf
+        lda     rd              ; get minutes
+        sep     scall           ; output it
+        dw      intout2
+        ldi     ':'             ; now a colon
+        str     rf              ; store into buffer
+        inc     rf
+        lda     rd              ; get seconds
+        sep     scall           ; output it
+        dw      intout2
+        ldi     0
+        str     rf              ; write terminator
+        sep     sret            ; and return
+
+; ************************************
+; *** Convert ascii date to packed ***
+; *** RF - pointer to ascii date   ***
+; *** RA - destination address     ***
+; ************************************
+astodt: glo     rd              ; save consumed register
+        stxd
+        ghi     rd
+        stxd
+        sep     scall           ; convert first number
+        dw      atoi
+        glo     rd              ; get value
+        smi     13              ; see if valid month
+        lbdf    dterr           ; jump if invalid
+        glo     rd              ; recover number
+        str     ra              ; store into output
+        inc     ra              ; and increment
+        lda     rf              ; get next char
+        smi     '/'             ; must be a slash
+        lbnz    dterr
+        sep     scall           ; get next number
+        dw      atoi
+        glo     rd              ; get value
+        smi     32              ; check next number
+        lbdf    dterr           ; jump if invalid
+        glo     rd              ; recover value
+        str     ra              ; and save in output
+        inc     ra              ; and increment
+        lda     rf              ; get next char
+        smi     '/'             ; must be a slash
+        lbnz    dterr           ; jump if not
+        sep     scall           ; now convert year
+        dw      atoi
+        ghi     rd              ; get high byte
+        lbnz    y4              ; jump if 4 digit year
+        glo     rd              ; need to check y2k
+        smi     72              ; need to check for y2k threshold
+        lbnf    y2k             ; jump if 2000+
+asdtend:
+        str     ra              ; store into output
+        inc     ra              ; move to next position
+        adi     0               ; signal valid date
+        lbr     get_rd          ; recover RD and return
+y4:     glo     rd              ; subtract 1972
+        smi     180
+        lbr     asdtend         ; and store
+y2k:    glo     rd              ; recover value
+        adi     28              ; add in offset
+        lbr     asdtend         ; and continue processing
+
+; ************************************
+; *** Convert ascii time to packed ***
+; *** RF - pointer to ascii time   ***
+; *** RA - destination address     ***
+; ************************************
+astotm: glo     rd              ; save consumed register
+        stxd
+        ghi     rd
+        stxd
+        sep     scall           ; move past any spaces
+        dw      ltrim
+        sep     scall           ; convert hours
+        dw      atoi
+        glo     rd              ; check if valid
+        smi     24
+        lbdf    dterr           ; jump if not
+        glo     rd              ; store value into result
+        str     ra
+        inc     ra
+        lda     rf              ; get next char
+        smi     ':'             ; must be a colon
+        lbnz    dterr           ; jump if not
+        sep     scall           ; convert minutes
+        dw      atoi
+        glo     rd              ; check for valid
+        smi     60
+        lbdf    dterr           ; jump if not
+        glo     rd              ; store value into result
+        str     ra
+        inc     ra
+        lda     rf              ; get next char
+        plo     re              ; keep a copy
+        smi     ':'             ; check for colon
+        lbz     is_sec          ; jump if seconds are provided
+        glo     re              ; need to check for valid characters
+        lbz     no_sec          ; jump if terminator
+        smi     32              ; otherwise must be a space
+        lbnz    dterr           ; jump on other chars to err
+no_sec: ldi     0               ; set seconds to zero
+tm_cont:str     ra
+        adi     0               ; signal no error
+get_rd: irx                     ; recover consumed register
+        ldxa
+        phi     rd
+        ldx
+        plo     rd
+        sep     sret            ; and return
+is_sec: sep     scall           ; convert seconds
+        dw      atoi
+        glo     rd              ; check for valid
+        smi     60
+        lbdf    dterr           ; jump if not valid
+        glo     rd              ; store answer and return
+        lbr     tm_cont
+dterr:  smi     0               ; signal an error
+        lbr     get_rd          ; recover RD and return
+#endif  ;; "#ifdef NVR" ...
+
+#ifdef EIDE
 ; ********************************
 ; *** Select master ide device ***
 ; ********************************
@@ -905,9 +1164,9 @@ master:    sep     scall               ; wait til drive ready
            dw      waitrdy
            lbdf    sel_err             ; jump if timedout
            sex     r3                  ; setup for immediate outs
-           out     2                   ; select device register
+           out     IDE_SELECT          ; select device register
            db      6
-           out     3                   ; now output code for master
+           out     IDE_DATA            ; now output code for master
            db      0
            sex     r2                  ; restore x register
            adi     0                   ; signal no error
@@ -922,9 +1181,9 @@ slave:     sep     scall               ; wait til drive ready
            dw      waitrdy
            lbdf    sel_err             ; jump if timedout
            sex     r3                  ; setup for immediate outs
-           out     2                   ; select device register
+           out     IDE_SELECT          ; select device register
            db      6
-           out     3                   ; now output code for slave
+           out     IDE_DATA            ; now output code for slave
            db      010h
            sex     r2                  ; restore x register
            adi     0                   ; signal no error
@@ -968,9 +1227,9 @@ ident_go:  glo     rc                  ; save consumed registers
            dw      waitrdy
            lbdf    sel_err             ; jump on timeout
            sex     r3                  ; setup for outs
-           out     2                   ; select command port
+           out     IDE_SELECT          ; select command port
            db      7
-           out     3                   ; issue get identity command
+           out     IDE_DATA            ; issue get identity command
            db      0ech
            sex     r2                  ; reset stack
            sep     scall               ; wait for DRQ
@@ -1010,13 +1269,13 @@ ide_size:  glo     rd                  ; get selected drive
 sz_master: sep     scall               ; select master drive
            dw      master
 size_go:   sex     r3                  ; setup for immediate out
-           out     2                   ; select status register
+           out     IDE_SELECT          ; select status register
            db      07h
            sex     r2                  ; reset stack
            ldi     0                   ; setup for failure count
            plo     rc
            phi     rc
-rdyloopz:  inp     3                   ; read status port
+rdyloopz:  inp     IDE_DATA            ; read status port
            ani     0c0h                ; mask for BSY and RDY
            smi     040h                ; want only RDY bit
            lbz     sz_ready            ; jump if drive is ready
@@ -1030,36 +1289,36 @@ rdyloopz:  inp     3                   ; read status port
            plo     rf
            sep     sret                ; and return
 sz_ready:  sex     r3                  ; issued commands to perform an ident
-           out     2                   ; select command register
+           out     IDE_SELECT          ; select command register
            db      07h
-           out     3                   ; issue identify command
+           out     IDE_DATA            ; issue identify command
            db      0ech
            sex     r2                  ; pont x back to stack
            sep     scall               ; wait for DRQ
            dw      drqloop
            sex     r3                  ; now setup data register
-           out     2
+           out     IDE_SELECT
            db      0
            sex     r2                  ; x back to stack
            ldi     120                 ; need to throw away 120 bytes
            plo     rc
-size_lp1:  inp     3                   ; read byte from drive
+size_lp1:  inp     IDE_DATA            ; read byte from drive
            dec     rc                  ; decrement count
            glo     rc                  ; see if done
            lbnz    size_lp1            ; loop back if not
-           inp     3                   ; read 4 bytes into r8:r7
+           inp     IDE_DATA            ; read 4 bytes into r8:r7
            plo     r7
-           inp     3
+           inp     IDE_DATA
            phi     r7
-           inp     3
+           inp     IDE_DATA
            plo     r8
-           inp     3
+           inp     IDE_DATA
            phi     r8
            ldi     1                   ; need to read 388 more bytes
            phi     rc
            ldi     132
            plo     rc
-size_lp2:  inp     3                   ; read byte
+size_lp2:  inp     IDE_DATA            ; read byte
            dec     rc                  ; decrement count
            glo     rc                  ; see if done
            lbnz    size_lp2
@@ -1091,205 +1350,6 @@ size_lp3:  glo     r8                  ; shift whole number right by 1
            plo     rf
            sep     sret                ; and return
 
-; ****************************************************
-; *** Output 2 digit decimal number with leading 0 ***
-; *** D - value to output                          ***
-; *** RF - buffer to write value to                ***
-; ****************************************************
-intout2:   str     r2                  ; save value for a moment
-           ldi     0                   ; setup count
-           plo     re
-           ldn     r2                  ; retrieve it
-intout2lp: smi     10                  ; subtract 10
-           lbnf    intout2go           ; jump if too small
-           inc     re                  ; increment tens
-           lbr     intout2lp           ; and keep looking
-intout2go: adi     10                  ; make positive again
-           str     r2                  ; save units
-           glo     re                  ; get tens
-           adi     '0'                 ; convert to ascii
-           str     rf                  ; store into buffer
-           inc     rf
-           ldn     r2                  ; recover units
-           adi     '0'                 ; convert to ascii
-           str     rf                  ; and store into buffer
-           inc     rf
-           sep     sret                ; return to caller
-
-; ************************************
-; *** Convert packed date to ascii ***
-; *** RD - pointer to packed date  ***
-; *** RF - pointer to buffer       ***
-; ************************************
-dttoas:    lda     rd                  ; retrieve month
-           sep     scall               ; output it
-           dw      intout2
-           ldi     '/'                 ; now a slash
-           str     rf                  ; store into buffer
-           inc     rf
-           lda     rd                  ; retrieve day
-           sep     scall               ; output it
-           dw      intout2
-           ldi     '/'                 ; now a slash
-           str     rf                  ; store into buffer
-           inc     rf
-           lda     rd                  ; [RLA] get year
-           stxd                        ; save contents of RD
-           adi     180                 ; add base of 1972
-           plo     rd
-           ghi     rd                  ; save high byte
-           stxd
-           ldi     7                   ; high byte of 1972
-           adci    0                   ; propagate the carry
-           phi     rd
-           sep     scall               ; output the year
-           dw      f_uintout
-           ldi     0                   ; write terminator
-           str     rf
-           irx                         ; recover rd
-           ldxa
-           phi     rd
-           ldx
-           plo     rd
-           sep     sret                ; and return
-
-
-
-
-; ************************************
-; *** Convert packed time to ascii ***
-; *** RD - pointer to packed time  ***
-; *** RF - pointer to buffer       ***
-; ************************************
-tmtoas:    ldi     ' '                 ; space after year
-           str     rf                  ; store into buffer
-           inc     rf
-           lda     rd                  ; get hour
-           sep     scall               ; output it
-           dw      intout2
-           ldi     ':'                 ; now a colon
-           str     rf                  ; store into buffer
-           inc     rf
-           lda     rd                  ; get minutes
-           sep     scall               ; output it
-           dw      intout2
-           ldi     ':'                 ; now a colon
-           str     rf                  ; store into buffer
-           inc     rf
-           lda     rd                  ; get seconds
-           sep     scall               ; output it
-           dw      intout2
-           ldi     0
-           str     rf                  ; write terminator
-           sep     sret                ; and return
-
-; ************************************
-; *** Convert ascii date to packed ***
-; *** RF - pointer to ascii date   ***
-; *** RA - destination address     ***
-; ************************************
-astodt:    glo     rd                  ; save consumed register
-           stxd
-           ghi     rd
-           stxd
-           sep     scall               ; convert first number
-           dw      atoi
-           glo     rd                  ; get value
-           smi     13                  ; see if valid month
-           lbdf    dterr               ; jump if invalid
-           glo     rd                  ; recover number
-           str     ra                  ; store into output
-           inc     ra                  ; and increment
-           lda     rf                  ; get next char
-           smi     '/'                 ; must be a slash
-           lbnz    dterr
-           sep     scall               ; get next number
-           dw      atoi
-           glo     rd                  ; get value
-           smi     32                  ; check next number
-           lbdf    dterr               ; jump if invalid
-           glo     rd                  ; recover value
-           str     ra                  ; and save in output
-           inc     ra                  ; and increment
-           lda     rf                  ; get next char
-           smi     '/'                 ; must be a slash
-           lbnz    dterr               ; jump if not
-           sep     scall               ; now convert year
-           dw      atoi
-           ghi     rd                  ; get high byte
-           lbnz    y4                  ; jump if 4 digit year
-           glo     rd                  ; need to check y2k
-           smi     72                  ; need to check for y2k threshold
-           lbnf    y2k                 ; jump if 2000+
-asdtend:   str     ra                  ; store into output
-           inc     ra                  ; move to next position
-           adi     0                   ; signal valid date
-           lbr     get_rd              ; recover RD and return
-y4:        glo     rd                  ; subtract 1972
-           smi     180
-           lbr     asdtend             ; and store
-y2k:       glo     rd                  ; recover value
-           adi     28                  ; add in offset
-           lbr     asdtend             ; and continue processing
-
-
-; ************************************
-; *** Convert ascii time to packed ***
-; *** RF - pointer to ascii time   ***
-; *** RA - destination address     ***
-; ************************************
-astotm:    glo     rd                  ; save consumed register
-           stxd
-           ghi     rd
-           stxd
-           sep     scall               ; move past any spaces
-           dw      ltrim
-           sep     scall               ; convert hours
-           dw      atoi
-           glo     rd                  ; check if valid
-           smi     24
-           lbdf    dterr               ; jump if not 
-           glo     rd                  ; store value into result
-           str     ra
-           inc     ra
-           lda     rf                  ; get next char
-           smi     ':'                 ; must be a colon
-           lbnz    dterr               ; jump if not
-           sep     scall               ; convert minutes
-           dw      atoi
-           glo     rd                  ; check for valid
-           smi     60
-           lbdf    dterr               ; jump if not
-           glo     rd                  ; store value into result
-           str     ra
-           inc     ra
-           lda     rf                  ; get next char
-           plo     re                  ; keep a copy
-           smi     ':'                 ; check for colon
-           lbz     is_sec              ; jump if seconds are provided
-           glo     re                  ; need to check for valid characters
-           lbz     no_sec              ; jump if terminator
-           smi     32                  ; otherwise must be a space
-           lbnz    dterr               ; jump on other chars to err
-no_sec:    ldi     0                   ; set seconds to zero
-tm_cont:   str     ra
-           adi     0                   ; signal no error
-get_rd:    irx                         ; recover consumed register
-           ldxa
-           phi     rd
-           ldx
-           plo     rd
-           sep     sret                ; and return
-is_sec:    sep     scall               ; convert seconds
-           dw      atoi
-           glo     rd                  ; check for valid
-           smi     60
-           lbdf    dterr               ; jump if not valid
-           glo     rd                  ; store answer and return
-           lbr     tm_cont
-dterr:     smi     0                   ; signal an error
-           lbr     get_rd              ; recover RD and return
-
 ; ***********************************
 ; *** Check for valid boot loader ***
 ; ***********************************
@@ -1302,7 +1362,8 @@ btcheck:   ldi     1                   ; point to boot code
            ldi     0                   ; setup initial value
            plo     rd
            sex     rf                  ; point X to boot code
-btchk_lp:  glo     rd                  ; get value
+btchk_lp:
+           glo     rd                  ; get value
            add                         ; add in next byte
            irx                         ; move pointer
            shl                         ; shift high byte into DF
@@ -1318,45 +1379,61 @@ btchk_lp:  glo     rd                  ; get value
            lbnz    err                 ; jump on mismatch to error
            adi     0                   ; signal good
            sep     sret                ; and return
-          
-#endif
+#endif  ;; "#ifdef EIDE" ...
 
+
+; ****************************************************************
+; * [RLA] Extended BIOS vectors ...                              *
+; * [RLA]   This is probably obvious, but DON'T CHANGE THE ORDER *
+; * [RLA] OF THESE VECTORS!!!                                    *
+; ****************************************************************
            org     0f800h
 f_bread:   lbr     read
 f_btype:   lbr     type
 f_btest:   lbr     brktest
-#ifdef ELF2K
-f_utype:   lbr     e2k_utype
-f_uread:   lbr     e2k_uread
-f_utest:   lbr     e2k_utest
-f_usetbd:  lbr     e2k_stbd
-f_gettod:  lbr     e2k_gtod
-f_settod:  lbr     e2k_stod
-f_rdnvr:   lbr     e2k_rdnvr
-f_wrnvr:   lbr     e2k_wrnvr
-f_idesize: lbr     ide_size
-f_ideid:   lbr     ide_ident
-f_dttoas:  lbr     dttoas
-f_tmtoas:  lbr     tmtoas
-f_rtctest: lbr     rtctest
-f_astodt:  lbr     astodt
-f_astotm:  lbr     astotm
+#ifdef UART
+f_utype:   lbr     e2k_utype    ; [RLA] type console character via UART
+f_uread:   lbr     e2k_uread    ; [RLA] read console character via UART
+f_utest:   lbr     e2k_utest    ; [RLA] test UART for character available
+f_usetbd:  lbr     e2k_stbd     ; [RLA] set UART baud rate and character format
 #else
 f_utype:   lbr     err
 f_uread:   lbr     err
 f_utest:   lbr     err
 f_usetbd:  lbr     err
+#endif
+#ifdef NVR
+f_gettod:  lbr     e2k_gtod     ; [RLA] get RTC time and date
+f_settod:  lbr     e2k_stod     ; [RLA] set RTC time and date
+f_rdnvr:   lbr     e2k_rdnvr    ; [RLA] read NVR data
+f_wrnvr:   lbr     e2k_wrnvr    ; [RLA] write NVR data
+#else
 f_gettod:  lbr     err
 f_settod:  lbr     err
 f_rdnvr:   lbr     err
 f_wrnvr:   lbr     err
+#endif
+#ifdef EDIT
+f_idesize: lbr     ide_size     ; [RLA] return the size of attached IDE drive
+f_ideid:   lbr     ide_ident    ; [RLA] return the manufacturer of IDE drive
+#else
 f_idesize: lbr     err
 f_ideid:   lbr     err
+#endif
+#ifdef NVR
+f_dttoas:  lbr     dttoas       ; [RLA] convert date to ASCII
+f_tmtoas:  lbr     tmtoas       ; [RLA] convert time to ASCII
+f_rtctest: lbr     rtctest      ; [RLA] test if NVR/RTC present
+f_astodt:  lbr     astodt       ; [RLA] parse ASCII date
+f_astotm:  lbr     astotm       ; [RLA] parse ASCII time
+f_nvrcchk: lbr     nvr_chk      ; [RLA] compute NVR checksum
+#else
 f_dttoas:  lbr     err
 f_tmtoas:  lbr     err
 f_rtctest: lbr     err
 f_astodt:  lbr     err
 f_astotm:  lbr     err
+f_nvrcchk: lbr     err
 #endif
 
 ; *** rf - pointer to ascii string
@@ -1953,29 +2030,29 @@ resetide:  sep     scall               ; wait til drive ready
            stxd                        ; write drive select to stack
            ldi     6                   ; select device register
            str     r2                  ; write to stack
-           out     2                   ; write select port
-           out     3                   ; write device code
+           out     IDE_SELECT          ; write select port
+           out     IDE_DATA            ; write device code
            dec     r2                  ; point back
            sex     r3                  ; setup for immediate outs
 
-           out     2                   ; select interrupt port
+           out     IDE_SELECT          ; select interrupt port
            db      00eh
-           out     3                   ; function to perform soft reset
+           out     IDE_DATA            ; function to perform soft reset
            db      4
-           out     3                   ; and clear it
+           out     IDE_DATA            ; and clear it
            db      0
            sex     r2                  ; reset x to stack
            sep     scall               ; wait til drive ready
            dw      waitrdy
            bdf     ide_err             ; jump if timout
            sex     r3                  ; setup for immediate outs
-           out     2                   ; select feature register
+           out     IDE_SELECT          ; select feature register
            db      1
-           out     3                   ; enable 8 bit mode
+           out     IDE_DATA            ; enable 8 bit mode
            db      1
-           out     2                   ; select command register
+           out     IDE_SELECT          ; select command register
            db      7
-           out     3                   ; command to set features
+           out     IDE_DATA            ; command to set features
            db      0efh
 
 
@@ -2005,10 +2082,10 @@ wrtide:    glo     rc                  ; save consumed registers
            plo     rc                  ; place into low of count
            ldi     0                   ; need data register
            str     r2                  ; place on stack
-           out     2                   ; select data register
+           out     IDE_SELECT          ; select data register
            dec     r2                  ; move pointer
            sex     rf                  ; set data pointer
-wrtloop:   out     3                   ; write to ide controller
+wrtloop:   out     IDE_DATA            ; write to ide controller
            dec     rc                  ; decrement byte count
            glo     rc                  ; check for completion
            bnz     wrtloop             ; jump if not
@@ -2029,10 +2106,10 @@ ideret:    plo     re
            glo     re
            sep     sret                ; and return to caller
 ide_fail:  sex     r3                  ; setup for immediate out
-           out     2                   ; select error register
+           out     IDE_SELECT          ; select error register
            db      1
            sex     r2                  ; point X back to stack
-           inp     3                   ; read error register
+           inp     IDE_DATA            ; read error register
            smi     0                   ; signal an error
            br      ideret              ; and return
 
@@ -2052,10 +2129,10 @@ ide_read:  ldi     2                   ; high byte of 512
            ldi     0                   ; lo byte of 512
            plo     rc                  ; place into low of count
            str     r2                  ; place on stack
-           out     2                   ; select data register
+           out     IDE_SELECT          ; select data register
            dec     r2                  ; move pointer
            sex     rf                  ; set data pointer
-rdloop:    inp     3                   ; read from ide controller
+rdloop:    inp     IDE_DATA            ; read from ide controller
            inc     rf                  ; point to next position
            dec     rc                  ; decrement byte count
            glo     rc                  ; check for completion
@@ -2068,7 +2145,7 @@ rdloop:    inp     3                   ; read from ide controller
           
 waitrdy:   ldi     07h                 ; need status register
            str     r2                  ; store onto stack
-           out     2                   ; write ide selection port
+           out     IDE_SELECT          ; write ide selection port
            dec     r2                  ; point x back to free spot
            ldi     0                   ; setup timeout
            plo     rc
@@ -2079,13 +2156,13 @@ rdyloop:   dec     rc                  ; decrement timeout
            ghi     rc
            bnz     rdy_go
 ideerror:  sex     r3                  ; setup for immediate out
-           out     2                   ; seelct error register
+           out     IDE_SELECT          ; seelct error register
            db      1
            sex     r2                  ; set X back to stack
-           inp     3                   ; read error register into D
+           inp     IDE_DATA            ; read error register into D
            smi     0                   ; signal error occurred
            sep     sret                ; return to caller
-rdy_go:    inp     3                   ; read status port
+rdy_go:    inp     IDE_DATA            ; read status port
            shr                         ; shift error bit
            bdf     ideerror            ; jump if error occurred
            shlc                        ; shift it back
@@ -2124,12 +2201,12 @@ wrtcmd:    stxd                        ; write passed command to stack
            ldi     6                   ; head/device register
            str     r2                  ; write to stack
            ldi     7                   ; 7 sets to output
-wrtcmd2:   out     2
-           out     3
+wrtcmd2:   out     IDE_SELECT
+           out     IDE_DATA
            smi     1                   ; subtract 1
            bnz     wrtcmd2             ; loop back if not done
            dec     r2                  ; point back to free register
-drqloop:   inp     3                   ; read status register
+drqloop:   inp     IDE_DATA            ; read status register
            shr                         ; get error bit
            bdf     ideerror            ; jump if error
            shlc                        ; restore value
@@ -2163,7 +2240,7 @@ timalc:    SERREQ
            plo     rc
            phi     rb                  ; and counter 2
            plo     rb
-#ifdef ELF2K
+#ifdef UART
            lbr     e2k_timalc          ; use elf2000 specific timalc
 #endif
 timalc_o:  SERP    $                   ; wait until start bit found
@@ -2242,7 +2319,12 @@ sendct:    sep     rd                  ; perform bit delay
            pop     rf
            sep     sret
 
-#ifdef ELF2K
+#ifdef SERHDX
+; [RLA]   If the console bit banged serial is half duplex (as is, for example,
+; [RLA] the DS275 used in the ELF2K) then we can't echo input on a bit for bit
+; [RLA] basis.  Istead, we have to read the entire character, wait for the stop
+; [RLA] bit, and then transmit the whole character back to the terminal.  This
+; [RLA] version of read: does precisely that ...
 read:      glo     rf
            stxd
            ghi     rf
@@ -2307,6 +2389,8 @@ noecho:    sep     sret                ; and return to caller
 recvlp0:   br      recvlp1             ; equalize between 0 and 1
 
 #else
+; [RLA]   This version of read: is full duplex - it echos each bit as that
+; [RLA] bit is received...
 read:      push    rf                  ; save consumed registers
            push    rd
            ldi     9                   ; 8 bits to receive
@@ -2382,6 +2466,7 @@ ttyff:     sep     scall               ; display vt100 sequence to clear screen
            sep     sret                ; and return to caller
 
 
+         org     0fd00h
 initcall:  ldi     high ret
            dec     r2
            dec     r2
@@ -2394,7 +2479,6 @@ initcall:  ldi     high ret
            plo     r4
            sep     r5
 
-         org     0fd00h
 ; **** Strcmp compares the strings pointing to by R(D) and R(F)
 ; **** Returns:
 ; ****    R(F) = R(D)     0
@@ -2722,6 +2806,7 @@ idhex:     ldi     1                   ; signal hex number
 ; **** Returns: RF - last writable address
 freemem:   ldi     0         ; start from beginning of memory
            phi     rf        ; place into register
+           ldi     0ffh
            plo     rf
            sex     r2        ; be sure x points to stack
 fmemlp:    ldn     rf        ; get byte
@@ -2736,10 +2821,11 @@ fmemlp:    ldn     rf        ; get byte
            bz      fmemdn    ; jump if not different
            glo     re        ; recover byte
            str     rf        ; write back into memory
-           inc     rf        ; point to next position
-           glo     rf        ; check for possible wrap around
+           ghi     rf
+           adi     1
+           phi     rf
            bnz     fmemlp    ; jump if not
-#ifdef ELF2K
+#ifdef STGROM
 ;[RLA]   For the Elf 2000, we never want to use page 07FxxH - that belongs to
 ;[RLA] the Elf 2000 monitor program.  Likewise, if the 80 column video card
 ;[RLA] is installed then we need to reserve another 2K off the top of SRAM
@@ -2747,21 +2833,26 @@ fmemlp:    ldn     rf        ; get byte
 ;[RLA] if the video card is installed, but we can make a pretty good guess
 ;[RLA] by checking RE.1 (the baud rate constant) - if this is zero, then the
 ;[RLA] video card is being used as the console!
+#ifdef VIDEO
            ghi     re        ; [RLA] get the baud rate constant
-           bz      fmeml1    ; [RLA] if its zero the video card is in use
-;[RLA] No video card - test memory up to 07EFFH ...
+           ani     0feh      ; [RLA] mask out local echo bit
+           xri     0feh      ; [RLA] is the 80 column video card in use?
+           bnz     fmeml1    ; [RLA] branch if no video card
            ghi     rf        ; [RLA] get the current page
-           smi     07fh      ; [RLA] and stop at page 7FH
-           br      fmeml2    ; [RLA] ...
-;[RLA] Here if the video card is installed - test up 076FFH and stop...
-fmeml1:    ghi     rf        ; [RLA] get the current page
            smi     077h      ; [RLA] and stop at page 77H
+           br      fmeml2    ; [RLA] ...
+#endif
+;[RLA] No video card - test memory up to 07EFFH ...
+fmeml1:    ghi     rf        ; [RLA] get the current page
+           smi     07fh      ; [RLA] and stop at page 7FH
 fmeml2:
 #else
            ghi     rf
 #endif
            bnz     fmemlp
-fmemdn:    dec     rf        ; point back to last writable memory
+fmemdn:    ghi     rf        ; point back to last writable memory
+           smi     1
+           phi     rf
            sep     sret      ; and return to caller
 
 bootide:   ldi     high bootret        ; prepare for seetin call
@@ -2789,7 +2880,7 @@ bootret:   ldi     0                   ; select master drive
            phi     rf
            sep     scall
            dw      f_ideread
-#ifdef ELF2K
+#ifdef EIDE
            lbdf    err                 ; return to monitor if disk error
            sep     scall               ; check boot code
            dw      btcheck
@@ -2826,17 +2917,23 @@ typemsg:   lda     rf                  ; load byte from message
 ; ***          Bit 4 - RTC               ***
 ; ***          Bit 5 - NVR               ***
 ; ******************************************
-#ifdef ELF2K
-getdev:    ldi     03dh                ; indicate IDE/Bit-banged serial
-           plo     rf                  ; RTC and UART for Elf 2000
-           ldi     0                   ; high byte is zero
-           phi     rf
-           sep     sret                ; return
+
+DEVICES:equ     05h     ; all versions support IDE and bit banged serial
+#ifdef UART
+UARTDEV:equ     08h     ; UART is supported too
 #else
-getdev:    ldi     05h                 ; indicate IDE/Bit-banged serial
-           plo     rf
+UARTDEV:equ     0       ; no UART
+#endif
+#ifdef NVR
+NVRDEV: equ     30h     ; RTC and NVR supported
+#else
+NVRDEV: equ     0       ; no RTC nor NVR
+#endif
+
+getdev:    ldi     DEVICES+UARTDEV+NVRDEV  ; load map of supported devices
+           plo     rf                  ; ...
            ldi     0                   ; high byte is zero
-           phi     rf
+           phi     rf                  ; ...
            sep     sret                ; return
 #endif
 
@@ -2845,7 +2942,7 @@ numbers:   db      027h,010h,3,0e8h,0,100,0,10,0,1
            org     0ff00h
 f_boot:    lbr     bootide
 f_type:    lbr     tty
-#ifdef ELF2K
+#ifdef UART
 f_read:    lbr     e2k_rx
 #else
 f_read:    lbr     read
@@ -2869,11 +2966,11 @@ f_iderst:  lbr     resetide
 f_idewrt:  lbr     wrtide
 f_ideread: lbr     rdide
 f_initcall: lbr    initcall
-f_ideboot: lbr     bootide
+f_ideboot: lbr     bootret
 f_hexin:   lbr     hexin
 f_hexout2: lbr     hexout2
 f_hexout4: lbr     hexout4
-#ifdef ELF2K
+#ifdef UART
 f_tty:     lbr     e2k_tx
 #else
 f_tty:     lbr     type
@@ -2887,7 +2984,7 @@ f_uintout: lbr     uintout
 f_intout:  lbr     intout
 f_inmsg:   lbr     typeinmsg
 f_inputl:  lbr     input
-#ifdef ELF2K
+#ifdef UART
 f_brktest: lbr     e2k_brk
 #else
 f_brktest: lbr     brktest
