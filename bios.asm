@@ -21,6 +21,7 @@
 #define SERN            b2      ;  ... and IS inverted ...
 #define SERSEQ          req     ;  ...
 #define SERREQ          seq     ;  ...
+#define BASE            0f000h
 #endif
 
 ; [RLA] Spare Time Gizmos Elf 2000 configuration ...
@@ -44,6 +45,7 @@ include config.inc
 #define KBD_DATA        7       ; PS/2 keyboard ASCII data port
 #define BKBD            b2      ; branch on keyboard data ready
 #define BNKBD           bn2     ;  ... no keyboard data ready
+#define BASE            0f000h
 #endif
 
 #ifdef MC
@@ -53,6 +55,17 @@ include config.inc
 #define SERREQ      req
 #define  IDE_SELECT   2       ;  ... IDE register select I/O port
 #define  IDE_DATA     3       ;  ... IDE data I/O port
+#define BASE            0f000h
+#endif
+
+#ifdef MCHIP
+#define SERP        bn3
+#define SERN         b3
+#define SERSEQ      req
+#define SERREQ      seq
+#define  IDE_SELECT   2       ;  ... IDE register select I/O port
+#define  IDE_DATA     3       ;  ... IDE data I/O port
+#define BASE          00000h
 #endif
 
 #ifndef SERP
@@ -62,6 +75,7 @@ include config.inc
 #define SERREQ     req
 #define IDE_SELECT   2       ;  ... IDE register select I/O port
 #define IDE_DATA     3       ;  ... IDE data I/O port
+#define BASE            0f000h
 #endif
 
 ; [RLA] Other definitions ...
@@ -69,7 +83,7 @@ data:   equ     0
 scall:  equ     r4
 sret:   equ     r5
 
-          org     0f300h          ; [RLA] extended BIOS starts here
+          org     BASE+0300h          ; [RLA] extended BIOS starts here
 
 ; A couple of words on the baud rate constant (RE.1) usage -
 ;
@@ -1387,7 +1401,7 @@ btchk_lp:
 ; * [RLA]   This is probably obvious, but DON'T CHANGE THE ORDER *
 ; * [RLA] OF THESE VECTORS!!!                                    *
 ; ****************************************************************
-           org     0f800h
+           org     BASE+0800h
 f_bread:   lbr     read
 f_btype:   lbr     type
 f_btest:   lbr     brktest
@@ -1605,16 +1619,27 @@ intdone:   irx                         ; put x back where it belongs
 
 
 
-           org     0f900h
+           org     BASE+0900h
+#ifdef MCHIP
+buffer:    equ     0fc00h
+#else
 buffer:    equ     03
+#endif
 minimon:   ldi     high start          ; setup main pc
            phi     r6
            ldi     low start
            plo     r6
+#ifdef MCHIP
+           ldi     0fdh                ; setup stack
+           phi     r2
+           ldi     0ffh
+           plo     r2
+#else
            ldi     0                   ; setup stack
            phi     r2
            ldi     0ffh
            plo     r2
+#endif
            sex     r2
            lbr     f_initcall
 start:     sep     scall               ; initialize baud setting
@@ -1788,7 +1813,7 @@ fails:     adi     0                   ; signal failure
 err:       smi     0                   ; signal an error
            sep     sret                ; and return
 
-           org   0fa00h
+           org     BASE+0a00h
 ; ***************************************************************
 ; *** Function to convert hex input characters to binary      ***
 ; *** RF - Pointer to characters                              ***
@@ -1981,7 +2006,7 @@ ishex:     sep     scall               ; see if it is numeric
 ; +04   = Program Execution Address
 ; +06   = Accual PROGRAM Bytes
 ;*********************************************************
-           org   0fadah
+           org     BASE+0adah
 mover:     sex     r0
            lda     rf
            phi     r0
@@ -2018,7 +2043,7 @@ moverlp:   lda     rf
            plo     r0
            sep     r0
 
-           org     0fb00h
+           org     BASE+0b00h
 resetide:  sep     scall               ; wait til drive ready
            dw      waitrdy
            bdf     ide_err             ; jump if timout
@@ -2215,7 +2240,7 @@ drqloop:   inp     IDE_DATA            ; read status register
            sep     sret                ; return to caller
 ; the branch to beforerdy, allows us to use waitrdy again
 
-           org     0fc00h
+           org     BASE+0c00h
            sep     r3
 delay:     ghi     re                  ; get baud constant
            shr                         ; remove echo flag
@@ -2333,7 +2358,7 @@ read:      glo     rf
            stxd
            ghi     rd
            stxd
-           ldi     8                   ; 8 bits to receive
+           ldi     9                   ; 8 bits to receive
            plo     rf
            ldi     high delay
            phi     rd
@@ -2466,7 +2491,7 @@ ttyff:     sep     scall               ; display vt100 sequence to clear screen
            sep     sret                ; and return to caller
 
 
-         org     0fd00h
+           org     BASE+0d00h
 initcall:  ldi     high ret
            dec     r2
            dec     r2
@@ -2686,7 +2711,7 @@ isterm:    sep     scall               ; see if alphanumeric
            lbdf    fails               ; fails if so
            lbr     passes
 
-         org     0fe00h
+           org     BASE+0e00h
 ; ******************************************
 ; *** Check if symbol is in symbol table ***
 ; *** RF - pointer to ascii symbol       ***
@@ -2804,7 +2829,7 @@ idhex:     ldi     1                   ; signal hex number
 
 ; **** Find last available memory address
 ; **** Returns: RF - last writable address
-freemem:   ldi     0         ; start from beginning of memory
+freemem:   ldi     080h      ; start from beginning of memory
            phi     rf        ; place into register
            ldi     0ffh
            plo     rf
@@ -2939,7 +2964,7 @@ getdev:    ldi     DEVICES+UARTDEV+NVRDEV  ; load map of supported devices
 
 numbers:   db      027h,010h,3,0e8h,0,100,0,10,0,1
 
-           org     0ff00h
+           org     BASE+0f00h
 f_boot:    lbr     bootide
 f_type:    lbr     tty
 #ifdef UART
@@ -3062,12 +3087,12 @@ inpterm:   smi     0                   ; signal <CTRL><C> exit
 ; ***    usage is:    sep R4                        ***
 ; ***                 dw  call_addr                 ***
 ; *****************************************************
-         org     0ffe0h
+         org     BASE+0fe0h
          lbr     call
-         org     0fff1h
+         org     BASE+0ff1h
          lbr     ret
 
-         org     0fff9h
+         org     BASE+0ff9h
 version: db      1,0,7
 chsum:   db      0,0,0,0
 
