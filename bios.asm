@@ -2721,7 +2721,6 @@ isterm:    sep     scall               ; see if alphanumeric
 ;;[RLA]   The BIOS assembles OK even if this next part isn't aligned, and we
 ;;[RLA] we desperately need those extra couple of bytes at $FF00!
            org     BASE+0e00h
-
 ; ******************************************
 ; *** Check if symbol is in symbol table ***
 ; *** RF - pointer to ascii symbol       ***
