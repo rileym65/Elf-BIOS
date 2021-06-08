@@ -21,6 +21,7 @@
 #define SERN            b2      ;  ... and IS inverted ...
 #define SERSEQ          req     ;  ...
 #define SERREQ          seq     ;  ...
+#define BASE            0f000h
 #endif
 
 ; [RLA] Spare Time Gizmos Elf 2000 configuration ...
@@ -39,11 +40,12 @@ include config.inc
 #define  IDE_DATA       3       ;  ... IDE data I/O port
 #define SERP            b3      ; bit banged serial input on EF3
 #define SERN            bn3     ;  ... and it is NOT inverted ...
-#define SERSEQ          req     ;  ...
-#define SERREQ          seq     ;  ...
+#define SERSEQ          seq     ;  ...
+#define SERREQ          req     ;  ...
 #define KBD_DATA        7       ; PS/2 keyboard ASCII data port
 #define BKBD            b2      ; branch on keyboard data ready
 #define BNKBD           bn2     ;  ... no keyboard data ready
+#define BASE            0f000h
 #endif
 
 #ifdef MC
@@ -53,6 +55,17 @@ include config.inc
 #define SERREQ      req
 #define  IDE_SELECT   2       ;  ... IDE register select I/O port
 #define  IDE_DATA     3       ;  ... IDE data I/O port
+#define BASE            0f000h
+#endif
+
+#ifdef MCHIP
+#define SERP        bn3
+#define SERN         b3
+#define SERSEQ      req
+#define SERREQ      seq
+#define  IDE_SELECT   2       ;  ... IDE register select I/O port
+#define  IDE_DATA     3       ;  ... IDE data I/O port
+#define BASE          00000h
 #endif
 
 #ifndef SERP
@@ -62,6 +75,7 @@ include config.inc
 #define SERREQ     req
 #define IDE_SELECT   2       ;  ... IDE register select I/O port
 #define IDE_DATA     3       ;  ... IDE data I/O port
+#define BASE            0f000h
 #endif
 
 ; [RLA] Other definitions ...
@@ -69,7 +83,11 @@ data:   equ     0
 scall:  equ     r4
 sret:   equ     r5
 
-          org     0f300h          ; [RLA] extended BIOS starts here
+#ifdef VIDEO
+        org     BASE+0200h      ; [RLA] the video card support needs more room
+#else
+        org     BASE+0300h      ; [RLA] extended BIOS starts here
+#endif
 
 ; A couple of words on the baud rate constant (RE.1) usage -
 ;
@@ -1387,7 +1405,7 @@ btchk_lp:
 ; * [RLA]   This is probably obvious, but DON'T CHANGE THE ORDER *
 ; * [RLA] OF THESE VECTORS!!!                                    *
 ; ****************************************************************
-           org     0f800h
+           org     BASE+0800h
 f_bread:   lbr     read
 f_btype:   lbr     type
 f_btest:   lbr     brktest
@@ -1413,7 +1431,7 @@ f_settod:  lbr     err
 f_rdnvr:   lbr     err
 f_wrnvr:   lbr     err
 #endif
-#ifdef EDIT
+#ifdef EIDE
 f_idesize: lbr     ide_size     ; [RLA] return the size of attached IDE drive
 f_ideid:   lbr     ide_ident    ; [RLA] return the manufacturer of IDE drive
 #else
@@ -1605,16 +1623,27 @@ intdone:   irx                         ; put x back where it belongs
 
 
 
-           org     0f900h
+           org     BASE+0900h
+#ifdef MCHIP
+buffer:    equ     0fc00h
+#else
 buffer:    equ     03
+#endif
 minimon:   ldi     high start          ; setup main pc
            phi     r6
            ldi     low start
            plo     r6
+#ifdef MCHIP
+           ldi     0fdh                ; setup stack
+           phi     r2
+           ldi     0ffh
+           plo     r2
+#else
            ldi     0                   ; setup stack
            phi     r2
            ldi     0ffh
            plo     r2
+#endif
            sex     r2
            lbr     f_initcall
 start:     sep     scall               ; initialize baud setting
@@ -1788,7 +1817,7 @@ fails:     adi     0                   ; signal failure
 err:       smi     0                   ; signal an error
            sep     sret                ; and return
 
-           org   0fa00h
+           org     BASE+0a00h
 ; ***************************************************************
 ; *** Function to convert hex input characters to binary      ***
 ; *** RF - Pointer to characters                              ***
@@ -1981,7 +2010,7 @@ ishex:     sep     scall               ; see if it is numeric
 ; +04   = Program Execution Address
 ; +06   = Accual PROGRAM Bytes
 ;*********************************************************
-           org   0fadah
+           org     BASE+0adah
 mover:     sex     r0
            lda     rf
            phi     r0
@@ -2018,7 +2047,7 @@ moverlp:   lda     rf
            plo     r0
            sep     r0
 
-           org     0fb00h
+           org     BASE+0b00h
 resetide:  sep     scall               ; wait til drive ready
            dw      waitrdy
            bdf     ide_err             ; jump if timout
@@ -2147,6 +2176,9 @@ waitrdy:   ldi     07h                 ; need status register
            str     r2                  ; store onto stack
            out     IDE_SELECT          ; write ide selection port
            dec     r2                  ; point x back to free spot
+;[RLA]   Note that the whole rdyloop thing takes about 24 machine cycles or 192
+;[RLA] clocks. The timeout here is 65,536 iterations which, at 2MHz, is about
+;[RLA] 6 seconds...
            ldi     0                   ; setup timeout
            plo     rc
            phi     rc
@@ -2215,7 +2247,7 @@ drqloop:   inp     IDE_DATA            ; read status register
            sep     sret                ; return to caller
 ; the branch to beforerdy, allows us to use waitrdy again
 
-           org     0fc00h
+           org     BASE+0c00h
            sep     r3
 delay:     ghi     re                  ; get baud constant
            shr                         ; remove echo flag
@@ -2333,7 +2365,7 @@ read:      glo     rf
            stxd
            ghi     rd
            stxd
-           ldi     8                   ; 8 bits to receive
+           ldi     9                   ; receive 9 bits (counting the START bit)
            plo     rf
            ldi     high delay
            phi     rd
@@ -2373,9 +2405,9 @@ recvdone:  SERREQ
            phi     rf
            ldx
            plo     rf
-           glo     re
-           shr
-           plo     re                  ; save char
+;;[RLA]    glo     re
+;;[RLA]    shr
+;;[RLA]    plo     re                  ; save char
            ghi     re                  ; get echo flag
            shr                         ; see if need echo
            glo     re                  ; get character
@@ -2466,7 +2498,7 @@ ttyff:     sep     scall               ; display vt100 sequence to clear screen
            sep     sret                ; and return to caller
 
 
-         org     0fd00h
+           org     BASE+0d00h
 initcall:  ldi     high ret
            dec     r2
            dec     r2
@@ -2686,7 +2718,10 @@ isterm:    sep     scall               ; see if alphanumeric
            lbdf    fails               ; fails if so
            lbr     passes
 
-         org     0fe00h
+;;[RLA]   The BIOS assembles OK even if this next part isn't aligned, and we
+;;[RLA] we desperately need those extra couple of bytes at $FF00!
+           org     BASE+0e00h
+
 ; ******************************************
 ; *** Check if symbol is in symbol table ***
 ; *** RF - pointer to ascii symbol       ***
@@ -2804,7 +2839,11 @@ idhex:     ldi     1                   ; signal hex number
 
 ; **** Find last available memory address
 ; **** Returns: RF - last writable address
-freemem:   ldi     0         ; start from beginning of memory
+#ifdef MCHIP
+freemem:   ldi     080h      ; start from beginning of memory
+#else
+freemem:   ldi     000h      ; start from beginning of memory
+#endif
            phi     rf        ; place into register
            ldi     0ffh
            plo     rf
@@ -2855,6 +2894,8 @@ fmemdn:    ghi     rf        ; point back to last writable memory
            phi     rf
            sep     sret      ; and return to caller
 
+;[RLA]   This is a "cold" boot - it will set up SCRT and a temporary stack
+;[RLA] before calling the "warm" boot at bootret: ...
 bootide:   ldi     high bootret        ; prepare for seetin call
            phi     r6
            ldi     low bootret
@@ -2865,10 +2906,19 @@ bootide:   ldi     high bootret        ; prepare for seetin call
            plo     r2
            sex     r2
            lbr     f_initcall
+
+;[RLA]   This routine will attempt to boot ElfOS from the primary (i.e. master)
+;[RLA] IDE drive.  It returns with DF=1 if there's a hardware error (e.g. no
+;[RLA] drive, read error, etc) and with DF=0 if the hardware is OK but the drive
+;[RLA] does not contain a bootable ElfOS system.  Of course, if it works then
+;[RLA] this routine never returns ...
 bootret:   ldi     0                   ; select master drive
            plo     rd
            sep     scall               ; reset ide drive
            dw      f_iderst
+#ifdef EIDE
+           lbdf    err                 ; [RLA] quit now if error!
+#endif
            ldi     0                   ; prepare to read sector 0
            plo     r7
            phi     r7
@@ -2886,11 +2936,7 @@ bootret:   ldi     0                   ; select master drive
            dw      btcheck
            lbdf    err                 ; error out on mismatch
 #endif
-           ldi     1
-           phi     r0
-           ldi     0
-           plo     r0
-           sep     r0
+           lbr     0106h
 
 input256:  ldi     1                   ; allow 256 input bytes
            phi     rc
@@ -2939,7 +2985,7 @@ getdev:    ldi     DEVICES+UARTDEV+NVRDEV  ; load map of supported devices
 
 numbers:   db      027h,010h,3,0e8h,0,100,0,10,0,1
 
-           org     0ff00h
+           org     BASE+0f00h
 f_boot:    lbr     bootide
 f_type:    lbr     tty
 #ifdef UART
@@ -3062,12 +3108,12 @@ inpterm:   smi     0                   ; signal <CTRL><C> exit
 ; ***    usage is:    sep R4                        ***
 ; ***                 dw  call_addr                 ***
 ; *****************************************************
-         org     0ffe0h
+         org     BASE+0fe0h
          lbr     call
-         org     0fff1h
+         org     BASE+0ff1h
          lbr     ret
 
-         org     0fff9h
-version: db      1,0,7
+         org     BASE+0ff9h
+version: db      1,0,8
 chsum:   db      0,0,0,0
 

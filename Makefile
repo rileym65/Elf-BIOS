@@ -13,6 +13,9 @@ elf2k: $(PROJECT).asm
 mc: $(PROJECT).asm
 	rcasm -l -v -x -d 1802 -DMC bios 2>&1 | tee bios.lst
 
+mchip: $(PROJECT).asm
+	rcasm -l -v -x -d 1802 -DMCHIP bios 2>&1 | tee bios.lst
+
 clean:
 	-rm $(PROJECT).prg
 
