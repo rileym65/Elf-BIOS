@@ -2235,6 +2235,9 @@ drqloop:   inp     IDE_DATA            ; read status register
            shr                         ; get error bit
            bdf     ideerror            ; jump if error
            shlc                        ; restore value
+           shl                         ; check BSY bit
+           bdf     drqloop             ; jump if set
+           shrc                        ; restore value
            ani     8                   ; mask for DRQ bit
            bz      drqloop             ; loop until found
            sep     sret                ; return to caller
@@ -3093,6 +3096,6 @@ inpterm:   smi     0                   ; signal <CTRL><C> exit
          lbr     ret
 
          org     BASE+0ff9h
-version: db      1,0,7
+version: db      1,0,8
 chsum:   db      0,0,0,0
 
