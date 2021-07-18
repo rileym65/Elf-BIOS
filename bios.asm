@@ -40,8 +40,8 @@ include config.inc
 #define  IDE_DATA       3       ;  ... IDE data I/O port
 #define SERP            b3      ; bit banged serial input on EF3
 #define SERN            bn3     ;  ... and it is NOT inverted ...
-#define SERSEQ          req     ;  ...
-#define SERREQ          seq     ;  ...
+#define SERSEQ          seq     ;  ...
+#define SERREQ          req     ;  ...
 #define KBD_DATA        7       ; PS/2 keyboard ASCII data port
 #define BKBD            b2      ; branch on keyboard data ready
 #define BNKBD           bn2     ;  ... no keyboard data ready
@@ -83,7 +83,11 @@ data:   equ     0
 scall:  equ     r4
 sret:   equ     r5
 
-          org     BASE+0300h          ; [RLA] extended BIOS starts here
+#ifdef VIDEO
+        org     BASE+0200h      ; [RLA] the video card support needs more room
+#else
+        org     BASE+0300h      ; [RLA] extended BIOS starts here
+#endif
 
 ; A couple of words on the baud rate constant (RE.1) usage -
 ;
@@ -1427,7 +1431,7 @@ f_settod:  lbr     err
 f_rdnvr:   lbr     err
 f_wrnvr:   lbr     err
 #endif
-#ifdef EDIT
+#ifdef EIDE
 f_idesize: lbr     ide_size     ; [RLA] return the size of attached IDE drive
 f_ideid:   lbr     ide_ident    ; [RLA] return the manufacturer of IDE drive
 #else
@@ -2172,6 +2176,9 @@ waitrdy:   ldi     07h                 ; need status register
            str     r2                  ; store onto stack
            out     IDE_SELECT          ; write ide selection port
            dec     r2                  ; point x back to free spot
+;[RLA]   Note that the whole rdyloop thing takes about 24 machine cycles or 192
+;[RLA] clocks. The timeout here is 65,536 iterations which, at 2MHz, is about
+;[RLA] 6 seconds...
            ldi     0                   ; setup timeout
            plo     rc
            phi     rc
@@ -2361,7 +2368,7 @@ read:      glo     rf
            stxd
            ghi     rd
            stxd
-           ldi     9                   ; 8 bits to receive
+           ldi     9                   ; receive 9 bits (counting the START bit)
            plo     rf
            ldi     high delay
            phi     rd
@@ -2401,9 +2408,9 @@ recvdone:  SERREQ
            phi     rf
            ldx
            plo     rf
-           glo     re
-           shr
-           plo     re                  ; save char
+;;[RLA]    glo     re
+;;[RLA]    shr
+;;[RLA]    plo     re                  ; save char
            ghi     re                  ; get echo flag
            shr                         ; see if need echo
            glo     re                  ; get character
@@ -2714,6 +2721,8 @@ isterm:    sep     scall               ; see if alphanumeric
            lbdf    fails               ; fails if so
            lbr     passes
 
+;;[RLA]   The BIOS assembles OK even if this next part isn't aligned, and we
+;;[RLA] we desperately need those extra couple of bytes at $FF00!
            org     BASE+0e00h
 ; ******************************************
 ; *** Check if symbol is in symbol table ***
@@ -2832,7 +2841,11 @@ idhex:     ldi     1                   ; signal hex number
 
 ; **** Find last available memory address
 ; **** Returns: RF - last writable address
+#ifdef MCHIP
 freemem:   ldi     080h      ; start from beginning of memory
+#else
+freemem:   ldi     000h      ; start from beginning of memory
+#endif
            phi     rf        ; place into register
            ldi     0ffh
            plo     rf
@@ -2883,6 +2896,8 @@ fmemdn:    ghi     rf        ; point back to last writable memory
            phi     rf
            sep     sret      ; and return to caller
 
+;[RLA]   This is a "cold" boot - it will set up SCRT and a temporary stack
+;[RLA] before calling the "warm" boot at bootret: ...
 bootide:   ldi     high bootret        ; prepare for seetin call
            phi     r6
            ldi     low bootret
@@ -2893,10 +2908,19 @@ bootide:   ldi     high bootret        ; prepare for seetin call
            plo     r2
            sex     r2
            lbr     f_initcall
+
+;[RLA]   This routine will attempt to boot ElfOS from the primary (i.e. master)
+;[RLA] IDE drive.  It returns with DF=1 if there's a hardware error (e.g. no
+;[RLA] drive, read error, etc) and with DF=0 if the hardware is OK but the drive
+;[RLA] does not contain a bootable ElfOS system.  Of course, if it works then
+;[RLA] this routine never returns ...
 bootret:   ldi     0                   ; select master drive
            plo     rd
            sep     scall               ; reset ide drive
            dw      f_iderst
+#ifdef EIDE
+           lbdf    err                 ; [RLA] quit now if error!
+#endif
            ldi     0                   ; prepare to read sector 0
            plo     r7
            phi     r7
@@ -2914,11 +2938,7 @@ bootret:   ldi     0                   ; select master drive
            dw      btcheck
            lbdf    err                 ; error out on mismatch
 #endif
-           ldi     1
-           phi     r0
-           ldi     0
-           plo     r0
-           sep     r0
+           lbr     0106h
 
 input256:  ldi     1                   ; allow 256 input bytes
            phi     rc
