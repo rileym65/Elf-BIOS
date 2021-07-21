@@ -2989,7 +2989,7 @@ numbers:   db      027h,010h,3,0e8h,0,100,0,10,0,1
 
            org     BASE+0f00h
 f_boot:    lbr     bootide
-f_type:    lbr     tty
+f_type:    lbr     type
 #ifdef UART
 f_read:    lbr     e2k_rx
 #else
@@ -3116,6 +3116,6 @@ inpterm:   smi     0                   ; signal <CTRL><C> exit
          lbr     ret
 
          org     BASE+0ff9h
-version: db      1,0,9
+version: db      1,0,10
 chsum:   db      0,0,0,0
 
