@@ -478,7 +478,7 @@ e2k_stbd:  plo     re                  ; save a coyp of parameters
            sex     r2                  ; [RLA] back to the stack again
            adi     0                   ; signal success
            sep     sret                ; return to caller
-baudtab:   dw      512,128,64,32,16,8,4
+baudtab:   dw      512,128,64,32,16,8,4,2 ; [RLA]
 #endif  ;; "#ifdef UART" ...
 
 #ifdef NVR
@@ -2261,7 +2261,18 @@ delay1:    dec     re                  ; decrement counter
            bz      delay-1             ; return if zero
            br      delay1              ; otherwise keep going
 
-timalc:    SERREQ
+timalc:
+;[RLA]   If the Elf2K 80 column video card and PS/2 keyboard are in use, then
+;[RLA] this is completely a no-op.  
+#ifdef VIDEO
+          ghi	   re			; [RLA] see if the VT1802 is active
+	   ani	   0feh			; [RLA] mask out the local echo bit
+	   xri     0feh			; [RLA] BAUD.1 == 0xFE means VT1802
+	   bnz     timal1		; [RLA] no - continue with autobaud
+	   sep     sret			; [RLA] yes - return right away
+timal1:
+#endif
+	   SERREQ
            glo     rb                  ; save consumed registesr
            stxd
            ghi     rb
@@ -2723,7 +2734,9 @@ isterm:    sep     scall               ; see if alphanumeric
 
 ;;[RLA]   The BIOS assembles OK even if this next part isn't aligned, and we
 ;;[RLA] we desperately need those extra couple of bytes at $FF00!
+#ifndef ELF2K
            org     BASE+0e00h
+#endif
 ; ******************************************
 ; *** Check if symbol is in symbol table ***
 ; *** RF - pointer to ascii symbol       ***
@@ -3118,4 +3131,3 @@ inpterm:   smi     0                   ; signal <CTRL><C> exit
          org     BASE+0ff9h
 version: db      1,0,9
 chsum:   db      0,0,0,0
-
