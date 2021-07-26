@@ -2878,7 +2878,7 @@ fmemlp:    ldn     rf        ; get byte
            ghi     rf
            adi     1
            phi     rf
-           bnz     fmemlp    ; jump if not
+;;[RLA]    bnz     fmemlp    ; jump if not
 #ifdef STGROM
 ;[RLA]   For the Elf 2000, we never want to use page 07FxxH - that belongs to
 ;[RLA] the Elf 2000 monitor program.  Likewise, if the 80 column video card
