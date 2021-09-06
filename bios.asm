@@ -3002,7 +3002,11 @@ numbers:   db      027h,010h,3,0e8h,0,100,0,10,0,1
 
            org     BASE+0f00h
 f_boot:    lbr     bootide
+#ifdef UART
+f_type:    lbr     e2k_tx
+#else
 f_type:    lbr     type
+#endif
 #ifdef UART
 f_read:    lbr     e2k_rx
 #else
