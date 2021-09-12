@@ -2265,14 +2265,14 @@ timalc:
 ;[RLA]   If the Elf2K 80 column video card and PS/2 keyboard are in use, then
 ;[RLA] this is completely a no-op.  
 #ifdef VIDEO
-          ghi	   re			; [RLA] see if the VT1802 is active
-	   ani	   0feh			; [RLA] mask out the local echo bit
-	   xri     0feh			; [RLA] BAUD.1 == 0xFE means VT1802
-	   bnz     timal1		; [RLA] no - continue with autobaud
-	   sep     sret			; [RLA] yes - return right away
+           ghi     re        ; [RLA] see if the VT1802 is active
+           ani     0feh      ; [RLA] mask out the local echo bit
+           xri     0feh      ; [RLA] BAUD.1 == 0xFE means VT1802
+           bnz     timal1    ; [RLA] no - continue with autobaud
+           sep     sret      ; [RLA] yes - return right away
 timal1:
 #endif
-	   SERREQ
+           SERREQ
            glo     rb                  ; save consumed registesr
            stxd
            ghi     rb
