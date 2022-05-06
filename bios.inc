@@ -77,23 +77,23 @@ f_version:  equ  (BIOS+0f9h)           ; 3 bytes holding bios version number
 
 ; "Extended" BIOS vectors
 
-f_bread     equ  (EBIOS+00h)        ; read from onboard serial port
-f_btype     equ  (EBIOS+03h)        ; write to onboard serial port
-f_btest     equ  (EBIOS+06h)        ; test onboard serial port
-f_utype     equ  (EBIOS+09h)        ; write to disk board UART
-f_uread     equ  (EBIOS+0ch)        ; read from disk board UART
-f_utest     equ  (EBIOS+0fh)        ; test disk board UART
-f_usetbd    equ  (EBIOS+12h)        ; set disk board UART baud rate and format
-f_gettod    equ  (EBIOS+15h)        ; read time of day clock
-f_settod    equ  (EBIOS+18h)        ; set time of day clock
-f_rdnvr     equ  (EBIOS+1bh)        ; read non volatile RAM
-f_wrnvr     equ  (EBIOS+1eh)        ; write non volatile RAM
-f_idesize   equ  (EBIOS+21h)        ; return size of attached IDE drive(s)
-f_ideid     equ  (EBIOS+24h)        ; return device data for IDE drive(s)
-f_tmtoas    equ  (EBIOS+2ah)        ; time to ASCII string
-f_dttoas    equ  (EBIOS+27h)        ; date to ASCII string
-f_rtctest   equ  (EBIOS+2dh)        ; test size and presence of RTC/NVR
-f_astodt    equ  (EBIOS+30h)        ; convert ASCII string to date
-f_astotm    equ  (EBIOS+33h)        ; convert ASCII string to time
+f_bread:    equ  (EBIOS+00h)        ; read from onboard serial port
+f_btype:    equ  (EBIOS+03h)        ; write to onboard serial port
+f_btest:    equ  (EBIOS+06h)        ; test onboard serial port
+f_utype:    equ  (EBIOS+09h)        ; write to disk board UART
+f_uread:    equ  (EBIOS+0ch)        ; read from disk board UART
+f_utest:    equ  (EBIOS+0fh)        ; test disk board UART
+f_usetbd:   equ  (EBIOS+12h)        ; set disk board UART baud rate and format
+f_gettod:   equ  (EBIOS+15h)        ; read time of day clock
+f_settod:   equ  (EBIOS+18h)        ; set time of day clock
+f_rdnvr:    equ  (EBIOS+1bh)        ; read non volatile RAM
+f_wrnvr:    equ  (EBIOS+1eh)        ; write non volatile RAM
+f_idesize:  equ  (EBIOS+21h)        ; return size of attached IDE drive(s)
+f_ideid:    equ  (EBIOS+24h)        ; return device data for IDE drive(s)
+f_tmtoas:   equ  (EBIOS+2ah)        ; time to ASCII string
+f_dttoas:   equ  (EBIOS+27h)        ; date to ASCII string
+f_rtctest:  equ  (EBIOS+2dh)        ; test size and presence of RTC/NVR
+f_astodt:   equ  (EBIOS+30h)        ; convert ASCII string to date
+f_astotm:   equ  (EBIOS+33h)        ; convert ASCII string to time
 
 
