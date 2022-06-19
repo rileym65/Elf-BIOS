@@ -1,3 +1,10 @@
+.op "PUSH","N","8$1 73 9$1 73"
+.op "POP","N","60 72 B$1 F0 A$1"
+.op "CALL","W","D4 H1 L1"
+.op "RTN","","D5"
+.op "MOV","NR","8$2 A$1 9$2 B$1"
+.op "MOV","NW","F8 L2 A$1 F8 H2 B$1"
+
 ; *******************************************************************
 ; *** This software is copyright 2005 by Michael H Riley          ***
 ; *** You have permission to use, modify, copy, and distribute    ***
@@ -1999,60 +2006,31 @@ ishex:     sep     scall               ; see if it is numeric
            lbnf    passes              ; jump if so
            lbr     fails
 
-;
-; MOVER.ASM - Function Move Programs Into Low memory
-; For Execution.
-;
-; Normal Entry PC = 3, RF = Program Header
-;
-; Exit: Starts Program at specified address
-; With P=0,X=0,IE=1
-;
-; This module written by Richard Peters
-;*********************************************************
-; HEADER DEFINITION ANY ADDRESS
-; OFFSET
-;  00   = Program RAM Start Address
-; +02   = Program RAM End Address
-; +04   = Program Execution Address
-; +06   = Accual PROGRAM Bytes
-;*********************************************************
-           org     BASE+0adah
-mover:     sex     r0
-           lda     rf
-           phi     r0
-           lda     rf
-           plo     r0
-           lda     rf
-           phi     r1
-           lda     rf
-           plo     r1
-           inc     r1
-           lda     rf
-           phi     ra
-           lda     rf
-           plo     ra
-moverlp:   lda     rf
-           str     r0
-           inc     r0
-           glo     r1
-           str     r0
-           glo     r0
-           sd
-           bnz     moverlp
-           ghi     r1
-           str     r0
-           ghi     r0
-           sd
-           bnz     moverlp
-           ldi     3
-           str     r0
-           ret
-           ghi     ra
-           phi     r0
-           glo     ra
-           plo     r0
-           sep     r0
+sdread:    ani     1                   ; want only 0 or 1 in device
+           ori     0eh                 ; ide LBA mode
+           shl                         ; shift to high nybble
+           shl
+           shl
+           shl
+           str     r2                  ; need to combine with R8.1
+           ghi     r8
+           ani     00fh                ; strip high nybble
+           or                          ; or with device setting
+           phi     r8                  ; back into r8.1
+           lbr     rdide               ; now standard read
+
+sdwrite:   ani     1                   ; want only 0 or 1 in device
+           ori     0eh                 ; ide LBA mode
+           shl                         ; shift to high nybble
+           shl
+           shl
+           shl
+           str     r2                  ; need to combine with R8.1
+           ghi     r8
+           ani     00fh                ; strip high nybble
+           or                          ; or with device setting
+           phi     r8                  ; back into r8.1
+           lbr     wrtide              ; now standard write
 
            org     BASE+0b00h
 resetide:  sep     scall               ; wait til drive ready
@@ -3048,7 +3026,7 @@ f_tty:     lbr     e2k_tx
 #else
 f_tty:     lbr     type
 #endif
-f_mover:   lbr     mover
+f_mover:   lbr     return
 f_minimon: lbr     minimon
 f_freemem: lbr     freemem
 f_isnum:   lbr     isnum
@@ -3070,6 +3048,9 @@ f_idnum:   lbr     idnum
 f_isterm:  lbr     isterm
 f_getdev:  lbr     getdev
 f_nbread:  lbr     read
+f_sdread:  lbr     sdread
+f_sdwrite: lbr     sdwrite
+f_sdreset: lbr     resetide
 
 input:     glo     ra                  ; save RA
            stxd
@@ -3104,12 +3085,11 @@ isbs:      glo     ra                  ; get input count
            dec     ra                  ; decrement the count
            dec     rf                  ; decrement buffer position
            inc     rc                  ; increment allowed characters
-bs2:       ldi     32                  ; display a space
-           sep     scall
-           dw      f_tty
-           ldi     8                   ; then backspace again
-           sep     scall
-           dw      f_tty
+
+bs2:       sep     scall
+           dw      f_inmsg
+           db      32,8,0
+
            br      inplp               ; and loop back for more
 nobs:      inc     ra                  ; increment input count
            dec     rc                  ; decrement character count
@@ -3142,5 +3122,5 @@ inpterm:   smi     0                   ; signal <CTRL><C> exit
          lbr     ret
 
          org     BASE+0ff9h
-version: db      1,0,11
-         db      0,0,0,0
+version: db      1,0,12
+chsum:   db      0,0,0,0

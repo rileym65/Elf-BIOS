@@ -1,7 +1,7 @@
 PROJECT = bios
 
 $(PROJECT): $(PROJECT).asm
-	rcasm -l -v -x -d 1802 bios 2>&1 | tee bios.lst
+	asm02 -l -L bios.asm
 
 pico: $(PROJECT).asm
 	echo Building for Pico/Elf
