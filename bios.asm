@@ -1,9 +1,4 @@
-.op "PUSH","N","8$1 73 9$1 73"
-.op "POP","N","60 72 B$1 F0 A$1"
-.op "CALL","W","D4 H1 L1"
-.op "RTN","","D5"
-.op "MOV","NR","8$2 A$1 9$2 B$1"
-.op "MOV","NW","F8 L2 A$1 F8 H2 B$1"
+#include    ../include/ops.inc
 
 ; *******************************************************************
 ; *** This software is copyright 2005 by Michael H Riley          ***
@@ -29,6 +24,8 @@
 #define SERSEQ          req     ;  ...
 #define SERREQ          seq     ;  ...
 #define BASE            0f000h
+#define ANYROM
+#define EXIT_ADDR       08003h
 #endif
 
 ; [RLA] Spare Time Gizmos Elf 2000 configuration ...
@@ -53,6 +50,8 @@ include config.inc
 #define BKBD            b2      ; branch on keyboard data ready
 #define BNKBD           bn2     ;  ... no keyboard data ready
 #define BASE            0f000h
+#define ANYROM
+#define EXIT_ADDR       08003h
 #endif
 
 #ifdef MC
@@ -73,6 +72,8 @@ include config.inc
 #define  IDE_SELECT   2       ;  ... IDE register select I/O port
 #define  IDE_DATA     3       ;  ... IDE data I/O port
 #define BASE          00000h
+#define ANYROM
+#define EXIT_ADDR     07003h
 #endif
 
 #ifndef SERP
@@ -1689,7 +1690,13 @@ mainlp:    ldi     high prompt         ; get address of prompt
            ghi     rc                  ; retrieve command
            smi     33
            bz      storesp
+#ifdef ANYROM
+           smi     14                  ; check for / return to os
+           lbz     EXIT_ADDR           ; ROM exit vector        
+           smi     14                  ; look for copy command
+#else            
            smi     28                  ; look for copy command
+#endif
            bz      copy                ; jump if found
            smi     2
            bz      examine
@@ -2982,7 +2989,7 @@ getdev:    ldi     DEVICES+UARTDEV+NVRDEV  ; load map of supported devices
            ldi     0                   ; high byte is zero
            phi     rf                  ; ...
            sep     sret                ; return
-#endif
+; #endif
 
 numbers:   db      027h,010h,3,0e8h,0,100,0,10,0,1
 
@@ -3122,5 +3129,5 @@ inpterm:   smi     0                   ; signal <CTRL><C> exit
          lbr     ret
 
          org     BASE+0ff9h
-version: db      1,0,12
+version: db      1,0,13
 chsum:   db      0,0,0,0
