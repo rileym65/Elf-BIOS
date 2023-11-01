@@ -3129,5 +3129,5 @@ inpterm:   smi     0                   ; signal <CTRL><C> exit
          lbr     ret
 
          org     BASE+0ff9h
-version: db      1,0,12
+version: db      1,0,13
 chsum:   db      0,0,0,0
