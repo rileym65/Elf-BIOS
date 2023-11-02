@@ -132,7 +132,7 @@ uart_test: sex     r3               ; [RLA] output immediate data
            sex     r2               ; [RLA] point to the stack again
            inp     UART_DATA        ; [RLA] read the MSR
            ani     0f0h             ; [RLA] check the current modem status
-           lbnz    no_uart          ; [RLA] all bits should be zero
+           bnz    no_uart           ; [RLA] all bits should be zero
            sex     r3               ; [RLA] back to X=P
            out     UART_SELECT      ; [RLA] select the MCR again
            db      14h              ; [RLA] ...
@@ -144,7 +144,7 @@ uart_test: sex     r3               ; [RLA] output immediate data
            inp     UART_DATA        ; [RLA] read the MSR
            ani     0f0h             ; [RLA] check the current modem status
            xri     0f0h             ; [RLA] all bits should be one this time
-           lbnz    no_uart          ; [RLA] no uart if they arent
+           bnz    no_uart           ; [RLA] no uart if they arent
            sex     r3               ; [RLA] X=P
            out     UART_SELECT      ; [RLA] select the MCR once more
            db      14h              ; [RLA] ...
@@ -208,7 +208,7 @@ abdlp1: ldn        rf                ; [RLA] get a byte from auto baud table
         xor                          ; [RLA] compare it to byte on the stack
         lbz        abd2              ; [RLA] branch if we found a match
         inc        rf                ; [RLA] skip the second byte
-        lbr        abdlp1            ; [RLA] and keep looking
+        br         abdlp1            ; [RLA] and keep looking
 
 ;   Here if we find a match in the auto baud table.  Remember that were
 ; receiving at a fairly fast rate (9600bps) and if the operator was sending
@@ -619,7 +619,7 @@ nortc:  irx                     ; [RLA] pop two bytes off the stack
 ; ********************************
 e2k_gtod:   sep     scall               ; see if RTC is present
             dw      rtctest
-            lbdf    rtc_go              ; jump if RTC was found
+            bdf     rtc_go              ; jump if RTC was found
 ; Here if there is no RTC installed...
 rtc_err:    smi     0                   ; signal error
             ldi     0                   ; as no RTC
@@ -641,13 +641,13 @@ rtc_go: sep     scall           ; [RLA] first read register 0x0a
         db      80h+0ah         ; [RLA] ...
         ani     70h             ; [RLA] check the DV2/1/0 bits
         xri     20h             ; [RLA] make sure the clock is running
-        lbnz    rtc_notset      ; [RLA] not runing otherwise
+        bnz     rtc_notset      ; [RLA] not runing otherwise
         sep     scall           ; [RLA] now read register 0x0b
         dw      rtcrdi          ; [RLA] ...
         db      80h+0bh         ; [RLA] ...
         ani     06h             ; [RLA] make sure the DM and 24 bits are set
         xri     06h             ; [RLA] (both bits must be set!)
-        lbnz    rtc_notset      ; [RLA] clock is not set otherwise
+        bnz     rtc_notset      ; [RLA] clock is not set otherwise
 
 ;   The second caveat is that we have to be careful _when_ we read the clock.
 ; Remember, the RTC hardware potentially changes the seconds, minutes, hours
@@ -665,7 +665,7 @@ rtc_w1: sep     scall           ; [RLA] UIP is in register 0x0a
         dw      rtcrdi          ; [RLA] ...
         db      80h+0ah         ; [RLA] ...
         ani     80h             ; [RLA] wait for UIP to be clear
-        lbnz    rtc_w1          ; [RLA] ...
+        bnz     rtc_w1          ; [RLA] ...
 
 ; Ok, were safe...  Read the clock...
         sep     scall           ; [RLA] first the month
@@ -1331,7 +1331,7 @@ sz_ready:  sex     r3                  ; issued commands to perform an ident
 size_lp1:  inp     IDE_DATA            ; read byte from drive
            dec     rc                  ; decrement count
            glo     rc                  ; see if done
-           lbnz    size_lp1            ; loop back if not
+           bnz     size_lp1            ; loop back if not
            inp     IDE_DATA            ; read 4 bytes into r8:r7
            plo     r7
            plo     rf                  ; also into RF
@@ -1405,7 +1405,7 @@ btchk_lp:
            plo     rd                  ; save value
            dec     rc                  ; decrement byte count
            glo     rc                  ; see if done
-           lbnz    btchk_lp            ; loop back if not
+           bnz     btchk_lp            ; loop back if not
            sex     r2                  ; point X back to stack
            glo     rd                  ; get number
            smi     060h                ; check against check value
