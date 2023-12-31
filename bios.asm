@@ -1,4 +1,9 @@
-#include    ../include/ops.inc
+.op "PUSH","N","8$1 73 9$1 73"
+.op "POP","N","60 72 B$1 F0 A$1"
+.op "CALL","W","D4 H1 L1"
+.op "RTN","","D5"
+.op "MOV","NR","8$2 A$1 9$2 B$1"
+.op "MOV","NW","F8 L2 A$1 F8 H2 B$1"
 
 ; *******************************************************************
 ; *** This software is copyright 2005 by Michael H Riley          ***
@@ -132,7 +137,7 @@ uart_test: sex     r3               ; [RLA] output immediate data
            sex     r2               ; [RLA] point to the stack again
            inp     UART_DATA        ; [RLA] read the MSR
            ani     0f0h             ; [RLA] check the current modem status
-           bnz    no_uart           ; [RLA] all bits should be zero
+           bnz     no_uart          ; [RLA] all bits should be zero
            sex     r3               ; [RLA] back to X=P
            out     UART_SELECT      ; [RLA] select the MCR again
            db      14h              ; [RLA] ...
@@ -1690,13 +1695,14 @@ mainlp:    ldi     high prompt         ; get address of prompt
            ghi     rc                  ; retrieve command
            smi     33
            bz      storesp
+
 #ifdef ANYROM
-           smi     14                  ; check for / return to os
-           lbz     EXIT_ADDR           ; ROM exit vector        
-           smi     14                  ; look for copy command
-#else            
+          smi     14                  ; check for / return to os
+          lbz     EXIT_ADDR           ; ROM exit vector        
+          smi     14                  ; look for copy command
+#else                       
            smi     28                  ; look for copy command
-#endif
+#endif           
            bz      copy                ; jump if found
            smi     2
            bz      examine
@@ -3129,5 +3135,5 @@ inpterm:   smi     0                   ; signal <CTRL><C> exit
          lbr     ret
 
          org     BASE+0ff9h
-version: db      1,0,13
+version: db      1,0,12
 chsum:   db      0,0,0,0
