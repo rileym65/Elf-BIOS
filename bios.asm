@@ -1375,7 +1375,7 @@ size_lp3:  glo     r8                  ; shift whole number right by 1
            ghi     rf
            shrc
            phi     rf
-           glo     r7
+           glo     rf
            shrc
            plo     rf
            dec     rc                  ; decrement count
@@ -3135,5 +3135,5 @@ inpterm:   smi     0                   ; signal <CTRL><C> exit
          lbr     ret
 
          org     BASE+0ff9h
-version: db      1,0,12
+version: db      1,0,13
 chsum:   db      0,0,0,0
